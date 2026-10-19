@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coltrane Circle</title>
-<meta name="description" content="An interactive circle of fifths and Coltrane circle: build chord progressions, see the geometry they draw, and explore the songs, colors and astrological lore behind them.">
+<meta name="description" content="An interactive circle of fifths, Coltrane circle, chromatic circle and diatonic circle: build chord progressions, see the geometry they draw, and explore the songs, colors and lore behind them.">
 <meta name="theme-color" content="#0a0c18">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
 <meta property="og:title" content="The Coltrane Circle">
-<meta property="og:description" content="Build chord progressions on the circle of fifths or Coltrane’s circle and watch them draw geometric patterns, with the songs, moods and astrological lore behind them.">
+<meta property="og:description" content="Build chord progressions on the circle of fifths, Coltrane’s circle, the chromatic clock or a key’s diatonic heptagon, and watch them draw geometric patterns, with the songs, moods and lore behind them.">
 <meta property="og:image" content="assets/social-preview.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -230,10 +230,7 @@
     <small>Progressions, geometry &amp; the music of the spheres</small>
   </div>
   <div class="controls">
-    <div class="seg" role="tablist" aria-label="Circle mode">
-      <button id="modeW" class="on" data-tip="info:western">Western fifths</button>
-      <button id="modeC" data-tip="info:coltrane">Coltrane circle</button>
-    </div>
+    <div class="seg" id="modes" role="tablist" aria-label="Circle mode"></div>
     <span class="divider"></span>
     <button class="btn" id="rotL" title="Rotate −7.5° (←)" data-tip="info:rotate">⟲</button>
     <button class="btn" id="rotR" title="Rotate +7.5° (→)" data-tip="info:rotate">⟳</button>
@@ -330,16 +327,7 @@
     </div>
     <div class="panel">
       <h2>Lore</h2>
-      <details class="lore" open>
-        <summary>Coltrane’s circle</summary>
-        <p>John Coltrane gave a hand-drawn diagram of the twelve tones to his friend, the multi-instrumentalist Yusef Lateef, who later published it in his <i>Repository of Scales and Melodic Patterns</i>. Musicians read the drawing in different ways. One common reading, used here, splits the twelve notes into two concentric rings, each a <b>whole-tone scale</b>. Every step around the circle of fifths jumps from one ring to the other, so the circle zigzags.</p>
-        <p>Pick every fourth note and you get a triangle of keys a major third apart. That’s the three-key system behind <i>Giant Steps</i> (1960), where the music jumps between B, G and E♭ instead of settling into one key.</p>
-      </details>
-      <details class="lore">
-        <summary>Music &amp; the zodiac</summary>
-        <p>Linking music and the cosmos goes back to the Pythagorean “music of the spheres”. Johannes Kepler’s <i>Harmonices Mundi</i> (1619) even assigned melodies to the planets. The circle of fifths and the zodiac share the same layout: twelve steps of 30°. This tool uses one common modern mapping, with Aries on C, and other traditions place the signs differently.</p>
-        <p>The fit is striking. The four <b>elements</b> (fire, earth, air, water) each form a trine, and trines land on the four <b>augmented triads</b>, the same major-third shape as Coltrane’s triangles. The three <b>modalities</b> (cardinal, fixed, mutable) each form a square, which matches the three <b>diminished seventh</b> chords. Yang and yin signs alternate, just as Coltrane’s two whole-tone rings do. And an opposition (180°) is the tritone. Treat all of this as symbolism, not science.</p>
-      </details>
+      <div id="lore"></div>
     </div>
   </section>
 </main>
@@ -397,32 +385,89 @@ const ELEM = {
 };
 const MODAL_DESC = { Cardinal:'initiating', Fixed:'sustaining', Mutable:'adapting' };
 
+// The seven classical planets, one per slot of the diatonic circle (rising fifths from the tonic).
+// Read clockwise they spell the weekdays; read up the scale they climb in Chaldean order.
+const PLANETS = [
+  { n:'Sun',     g:'☉', day:'Sunday',    kw:'the self, vitality, the center' },
+  { n:'Moon',    g:'☽', day:'Monday',    kw:'reflection, tides, the answering light' },
+  { n:'Mars',    g:'♂', day:'Tuesday',   kw:'drive, friction, courage' },
+  { n:'Mercury', g:'☿', day:'Wednesday', kw:'messages, wit, quick exchange' },
+  { n:'Jupiter', g:'♃', day:'Thursday',  kw:'expansion, generosity, the long view' },
+  { n:'Venus',   g:'♀', day:'Friday',    kw:'attraction, beauty, the leaning toward' },
+  { n:'Saturn',  g:'♄', day:'Saturday',  kw:'limits, time, the threshold' },
+];
+const FUNC = {
+  T:  { n:'Tonic',        s:'Tonic',    c:'#e8b85a', mood:'rest, arrival, home' },
+  PD: { n:'Pre-dominant', s:'Pre-dom',  c:'#5fd38d', mood:'departure, motion away from home' },
+  D:  { n:'Dominant',     s:'Dominant', c:'#ff6b5a', mood:'tension, the pull back home' },
+  X:  { n:'Chromatic',    s:'Outside',  c:'#a46bff', mood:'color borrowed from outside the scale' },
+};
 
-// Edge types by distance around the circle (0–6 steps of 30°)
-const EDGE = {
-  0: { short:'Mirror',          name:'Relative shift',      ang:'0°',   asp:'Conjunction ☌', color:'#eae4d4', shape:'Mirror line',
+/* =========================================================
+   Line palettes, one per wheel, keyed by distance around it
+   ========================================================= */
+const EDGE_FIFTHS = {
+  0: { short:'Mirror',          name:'Relative shift',      ang:'0°',   asp:'Conjunction ☌', color:'#eae4d4', shape:'Mirror line', acc:'shifts of light',
        feel:'Same notes, different face. You swap major for minor without changing key signature. Feels like a shift of light rather than a change of place.',
        astro:'Conjunction: two forces fused into one.' },
-  1: { short:'Golden arc',      name:'Fifth step',          ang:'30°',  asp:'Semi-sextile ⚺', color:'#f2b632', shape:'Golden arc (cycle of fifths)',
+  1: { short:'Golden arc',      name:'Fifth step',          ang:'30°',  asp:'Semi-sextile ⚺', color:'#f2b632', shape:'Golden arc (cycle of fifths)', acc:'warm resolution',
        feel:'Warm, natural, homeward. The pull of a dominant resolving: the most “correct” motion in tonal music.',
        astro:'Semi-sextile: neighbors who quietly grow from each other.' },
-  2: { short:'Sextile',         name:'Whole-step leap',     ang:'60°',  asp:'Sextile ⚹',     color:'#5fd38d', shape:'Hexagon (whole-tone)',
+  2: { short:'Sextile',         name:'Whole-step leap',     ang:'60°',  asp:'Sextile ⚹',     color:'#5fd38d', shape:'Hexagon (whole-tone)', acc:'bright lift',
        feel:'Bright, open, moving forward. Optimistic lift, like ♭VII → I or IV → V.',
        astro:'Sextile: opportunity, friendly cooperation.' },
-  3: { short:'Noir square',     name:'Minor-third axis',    ang:'90°',  asp:'Square □',      color:'#a46bff', shape:'Square (diminished cycle)',
+  3: { short:'Noir square',     name:'Minor-third axis',    ang:'90°',  asp:'Square □',      color:'#a46bff', shape:'Square (diminished cycle)', acc:'noir tension',
        feel:'Tense, dramatic, cinematic. Film-noir suspense. Four keys evenly spaced, so the ear can’t tell which one is home.',
        astro:'Square: friction, challenge, energy that demands action.' },
-  4: { short:'Cosmic triangle', name:'Major-third axis',    ang:'120°', asp:'Trine △',       color:'#3fc6ff', shape:'Triangle (augmented / Coltrane)',
+  4: { short:'Cosmic triangle', name:'Major-third axis',    ang:'120°', asp:'Trine △',       color:'#3fc6ff', shape:'Triangle (augmented / Coltrane)', acc:'cosmic surprise',
        feel:'Cosmic and kaleidoscopic. Sudden yet glowing key changes: the Giant Steps sound.',
        astro:'Trine: effortless flow, gifts, harmony between kindred elements.' },
-  5: { short:'Chromatic star',  name:'Chromatic slide',     ang:'150°', asp:'Quincunx ⚻',    color:'#ff5fb0', shape:'12-point star {12/5}',
+  5: { short:'Chromatic star',  name:'Chromatic slide',     ang:'150°', asp:'Quincunx ⚻',    color:'#ff5fb0', shape:'12-point star {12/5}', acc:'chromatic slink',
        feel:'Slippery, sultry, sophisticated. Half-step voice leading, the slink of a tritone sub resolving.',
        astro:'Quincunx: an awkward angle that forces adjustment and creativity.' },
-  6: { short:'Polar axis',      name:'Tritone opposition',  ang:'180°', asp:'Opposition ☍',  color:'#ff4b3e', shape:'Polar axis',
+  6: { short:'Polar axis',      name:'Tritone opposition',  ang:'180°', asp:'Opposition ☍',  color:'#ff4b3e', shape:'Polar axis', acc:'polar electricity',
        feel:'Electric, unstable, a full flip. The old “devil in music”, and also the jazz tritone substitution.',
        astro:'Opposition: polarity, confrontation, a mirror held up.' },
 };
-const stepDist = (a, b) => { const d = mod(a - b); return Math.min(d, 12 - d); };
+// On the chromatic clock the angle is the interval itself, so the palette runs warm (near) to cool (far).
+const EDGE_CHROMA = {
+  0: { short:'Parallel shift',  name:'Same root, new mode',   ang:'0°',   asp:'Conjunction ☌', color:'#eae4d4', shape:'Parallel line', acc:'modal shadow',
+       feel:'Same root, other mode: C major to C minor. The floor tilts while you stand still. Schubert’s favorite trick.',
+       astro:'Conjunction: two forces fused into one.' },
+  1: { short:'Half-step slide', name:'Semitone',              ang:'30°',  asp:'Semi-sextile ⚺', color:'#ff6f91', shape:'Dodecagon (chromatic scale)', acc:'chromatic pull',
+       feel:'The smallest step and the strongest melodic pull: leading tones, ♭II7 → I, ♭VI → V. On this wheel the slinkiest moves are the shortest lines.',
+       astro:'Semi-sextile: neighbors who quietly grow from each other.' },
+  2: { short:'Whole step',      name:'Whole tone',            ang:'60°',  asp:'Sextile ⚹',     color:'#ffb347', shape:'Hexagon (whole-tone)', acc:'forward lift',
+       feel:'Parallel, bright and forward: IV → V, ♭VII → I, or the whole-step key change.',
+       astro:'Sextile: opportunity, friendly cooperation.' },
+  3: { short:'Minor mediant',   name:'Minor third',           ang:'90°',  asp:'Square □',      color:'#d7e35a', shape:'Square (diminished seventh)', acc:'noir shadow',
+       feel:'Minor-third relations: dark, cinematic, noir. Four of them close a square, a diminished seventh chord.',
+       astro:'Square: friction, challenge, energy that demands action.' },
+  4: { short:'Major mediant',   name:'Major third',           ang:'120°', asp:'Trine △',       color:'#3fd2c7', shape:'Triangle (augmented / chromatic mediants)', acc:'cinematic glow',
+       feel:'Chromatic mediants: one shared note, two half-step slides. The glowing key shifts of Romantic and film music, and Coltrane’s Giant Steps triangle.',
+       astro:'Trine: effortless flow, gifts, harmony between kindred elements.' },
+  5: { short:'Fifth star',      name:'Perfect fourth / fifth', ang:'150°', asp:'Quincunx ⚻',   color:'#5b8cff', shape:'12-point star {12/5} (cycle of fifths)', acc:'functional pull',
+       feel:'The fifth, the strongest harmonic move in tonal music. Here it is a long, jagged line, and a chain of them draws a twelve-pointed star.',
+       astro:'Quincunx: an awkward angle that forces adjustment and creativity.' },
+  6: { short:'Tritone axis',    name:'Tritone',               ang:'180°', asp:'Opposition ☍',  color:'#b26bff', shape:'Polar axis', acc:'polar electricity',
+       feel:'The farthest note, splitting the octave in half: the axis a tritone substitution swings across.',
+       astro:'Opposition: polarity, confrontation, a mirror held up.' },
+};
+// On the heptagon, farther means more shared notes: steps share none, fifths one, thirds two.
+const EDGE_DIATONIC = {
+  0: { short:'Inflection', name:'Same degree, new accidental', ang:'0°',     asp:'Conjunction ☌', color:'#eae4d4', shape:'Inflection point', acc:'modal color',
+       feel:'Same scale degree, bent by an accidental: vii° to ♭VII, or vi to ♭VI. The letter stays and the scale changes color.',
+       astro:'Conjunction: two forces fused into one.' },
+  1: { short:'Fifth',      name:'Diatonic fifth',              ang:'51.4°',  asp:'Septile',        color:'#f2b632', shape:'Heptagon {7}', acc:'gravity',
+       feel:'One shared note and the strongest root motion in tonal music. Falling fifths (V–I, ii–V, vi–ii) feel like gravity; rising ones open a door.',
+       astro:'Septile, a seventh of the circle: hidden order, inspiration that arrives on its own schedule.' },
+  2: { short:'Step',       name:'Diatonic step',               ang:'102.9°', asp:'Bi-septile',     color:'#5fd38d', shape:'Heptagram {7/2}', acc:'clean lift',
+       feel:'No shared notes, so the change is clean and bright: IV–V, V–vi, ♭VI–♭VII–i. Chains of steps climb or slide like a staircase.',
+       astro:'Bi-septile: a turning point, the moment a hidden pattern shows itself.' },
+  3: { short:'Third',      name:'Diatonic third',              ang:'154.3°', asp:'Tri-septile',    color:'#3fc6ff', shape:'Heptagram {7/3}', acc:'soft blending',
+       feel:'Two shared notes: the softest change there is, more cross-fade than cut (I–vi, vi–IV, I–iii). The farthest points on this wheel are the closest relatives.',
+       astro:'Tri-septile: the long view, destiny worked out over time.' },
+};
 
 /* Functional harmony tables: [degree, quality, title, why, score] — V written as 'M' (made '7' in seventh mode) */
 const MAJ_T = {
@@ -478,6 +523,19 @@ const MIN_D = {0:'min',2:'dim',3:'maj',5:'min',7:'maj',8:'maj',10:'maj'};
 const DIAT_Q = { maj:'M', min:'m', dim:'dim' };
 const ROMAN = ['I','♭II','II','♭III','III','IV','♯IV','V','♭VI','VI','♭VII','VII'];
 
+/* Diatonic scales relative to the tonic. alt: chromatic root -> [scale degree it bends, -1 flat / +1 sharp] */
+const DIA = {
+  maj: diaScale(MAJ_D, { 1:[2,-1], 3:[4,-1], 6:[5,1], 8:[9,-1], 10:[11,-1] },
+                       { 0:'T', 4:'T', 9:'T', 2:'PD', 5:'PD', 7:'D', 11:'D' }),
+  min: diaScale(MIN_D, { 1:[2,-1], 4:[3,1], 6:[5,1], 9:[8,1], 11:[10,1] },
+                       { 0:'T', 3:'T', 8:'T', 2:'PD', 5:'PD', 7:'D', 10:'D' }),
+};
+function diaScale(degs, alt, func) {
+  const scale = Object.keys(degs).map(Number).sort((a, b) => a - b);   // scale (stepwise) order
+  const order = scale.slice().sort((a, b) => mod(a * 7) - mod(b * 7)); // rising fifths from the tonic
+  return { degs, alt, func, scale, order };
+}
+
 /* Famous progressions (degree:family relative to tonic; M=major, m=minor, 7=dominant, d=diminished) */
 const SONGS = [
   { name:'The “Axis” progression', roman:'I – V – vi – IV', pat:'0:M 7:M 9:m 5:M',
@@ -529,8 +587,8 @@ const S = {
   prog: [], ghosts: [], astro: true, sound: true, sevenths: false,
   pickRoot: 0, pickQ: 'M', preview: null, sugs: [], playing: -1,
 };
-const isCol = () => S.mode === 'coltrane';
-const useSev = () => S.sevenths || isCol();
+const circle = () => CIRCLES[S.mode];
+const useSev = () => S.sevenths || !!circle().sevenths;
 
 /* =========================================================
    Theory helpers
@@ -559,18 +617,27 @@ function adaptQ(q, deg) {
   return q;
 }
 
-/* Where a chord sits on the current wheel */
-const R = { hub: 214, in0: 222, in1: 322, out0: 326, out1: 436, z0: 446, z1: 500, nMaj: 198, nMin: 150 };
-function nodePos(c) {
-  const fam = famOf(c);
-  if (isCol()) return { idx: fIdx(c.root), r: c.root % 2 === 0 ? R.nMaj : R.nMin };
-  if (fam === 'min') return { idx: fIdx(c.root + 3), r: R.nMin };
-  if (fam === 'dim') return { idx: fIdx(c.root + 1), r: R.nMin };
-  return { idx: fIdx(c.root), r: R.nMaj };
+// Diatonic wheel: the key comes from the first chord, or from the builder's pick before there is one
+const dia = k => k.minor ? DIA.min : DIA.maj;
+const dKey = () => keyOf() || { tonic: S.pickRoot, minor: ['min','dim'].includes(QUAL[S.pickQ].fam) };
+function diaPlace(root, k) {
+  const D = dia(k), rel = mod(root - k.tonic);
+  if (D.degs[rel]) return { rel, letter: rel, alt: 0 };
+  const [letter, alt] = D.alt[rel];
+  return { rel, letter, alt };
 }
+const diaChord = (rel, k) => ({ root: mod(k.tonic + rel), q: DIAT_Q[dia(k).degs[rel]] });
+
+/* =========================================================
+   Wheel geometry (shared by every circle)
+   ========================================================= */
+const R = { hub: 214, in0: 222, in1: 322, out0: 326, out1: 436, nMaj: 198, nMin: 150, dia: 176, dHigh: 206, dLow: 138 };
 const D2R = Math.PI / 180;
-function polar(r, idx) { const a = (idx * 30 - 90) * D2R; return [r * Math.cos(a), r * Math.sin(a)]; }
+const slotDeg = () => 360 / circle().n;
+const ringDist = (a, b, n = circle().n) => { const d = mod(a - b, n); return Math.min(d, n - d); };
+function polar(r, idx) { const a = (idx * slotDeg() - 90) * D2R; return [r * Math.cos(a), r * Math.sin(a)]; }
 const f2 = n => n.toFixed(2);
+const ptsAttr = P => P.map(p => p.map(f2).join(',')).join(' ');
 // fixed pseudo-random sky so the stars don't jump around between renders
 function seeded(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
 const SKY = (() => {
@@ -583,17 +650,428 @@ const SKY = (() => {
   return stars;
 })();
 
+function arcPath(r0, r1, idx, gap = 0.7) {
+  const s = slotDeg(), a0 = (idx * s - 90 - s / 2 + gap) * D2R, a1 = (idx * s - 90 + s / 2 - gap) * D2R;
+  const p = (r, a) => `${f2(r * Math.cos(a))} ${f2(r * Math.sin(a))}`;
+  return `M${p(r1,a0)} A${r1} ${r1} 0 0 1 ${p(r1,a1)} L${p(r0,a1)} A${r0} ${r0} 0 0 0 ${p(r0,a0)} Z`;
+}
+function label(x, y, text, cls, size, extra = '') {
+  return `<text class="lbl ${cls}" x="${f2(x)}" y="${f2(y)}" data-x="${f2(x)}" data-y="${f2(y)}" font-size="${size}" ${extra}>${text}</text>`;
+}
+function keySig(idx) { return idx === 0 ? '0♯ 0♭' : idx < 6 ? `${idx}♯` : idx === 6 ? '6♯/6♭' : `${12 - idx}♭`; }
+// closed star polygon {n/step} through slot positions
+function starPts(r, n, step) { const P = []; for (let i = 0; i <= n; i++) P.push(polar(r, mod(i * step, n))); return P; }
+
+/* =========================================================
+   Shared readings for the twelve-fold wheels
+   ========================================================= */
+const zodLine = z => `<hr><p>${z.g}︎ <span class="k">${z.n}</span> · ${z.el} · ${z.mo} · ruled by ${z.ru}<br><span class="m">${z.kw}</span></p>`;
+const zodChip = p => { const z = ZOD[p.idx]; return `${z.g}︎ ${z.n} · ${z.el}`; };
+
+function aspectFigures(A, C) {
+  const idxSet = new Set(A.pts.map(p => p.idx)), has = i => idxSet.has(mod(i)), F = [];
+  const nm = i => NOTE[C.slotPc(mod(i))];
+  const seen = new Set(), push = (key, f) => { if (!seen.has(key)) { seen.add(key); F.push({ ...f, astro: true }); } };
+  for (let i = 0; i < 12; i++) {
+    if (has(i) && has(i+4) && has(i+8)) {
+      push('gt' + i % 4, { n:'Grand Trine △', d:`Three points 120° apart (${[i, i+4, i+8].map(nm).join('–')}): an augmented triad and one of Coltrane’s three-key triangles. In astrology it’s a closed circuit of ${ZOD[mod(i)].el} energy, effortless and self-contained.` });
+      if (has(i+6)) push('kite' + i, { n:'Kite ◇', d:'A Grand Trine with one point opposite it. The tritone gives the easy triangle a direction to fly in.' });
+    }
+    if (has(i) && has(i+3) && has(i+6) && has(i+9))
+      push('gc' + i % 3, { n:'Grand Cross ✚', d:`Four points 90° apart: a diminished seventh chord, symmetrical and restless. Astrologically it’s the ${ZOD[mod(i)].mo} cross, four forces pulling in four directions.` });
+    else if (has(i) && has(i+6) && has(i+3))
+      push('ts' + i, { n:'T-Square ⊤', d:'An opposition (tritone) with a third point squaring both ends. That’s the shape of a dominant 7th’s tritone plus a diminished pull: high tension that has to resolve.' });
+    if (has(i) && has(i+2) && has(i+6) && has(i+8))
+      push('mr' + i % 6, { n:'Mystic Rectangle ▭', d:'Two oppositions bridged by sextiles and trines. Tension held in a balanced frame, like two tritone substitutions side by side.' });
+    if (has(i) && has(i+2) && has(i+7))
+      push('yod' + i, { n:'Yod ✶ (“Finger of God”)', d:`Two points a sextile apart both reaching a third point by quincunx (150°). ${C.yod}` });
+  }
+  for (let p = 0; p < 2; p++) if ([0,2,4,6,8,10].every(j => has(j + p)))
+    push('hex' + p, { n:'Hexagram ✡', d:`All six points of one whole-tone scale, one of Coltrane’s two rings. In astrology, all six ${p ? 'yin (earth & water)' : 'yang (fire & air)'} signs.` });
+  return F;
+}
+function elementBalance(A) {
+  if (!S.astro || !A.prog.length) return '';
+  const elems = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
+  new Set(A.pts.map(p => p.idx)).forEach(i => elems[ZOD[i].el]++);
+  let h = `<h3>Elemental balance</h3><div class="elems">` + Object.entries(elems).map(([e, n]) =>
+    `<div class="elem" data-tip="elem:${e}" style="border-color:${n ? ELEM[e].c + '66' : 'var(--line)'}"><b style="color:${ELEM[e].c}">${n}</b>${e}</div>`).join('') + `</div>`;
+  const top = Object.entries(elems).sort((a, b) => b[1] - a[1]);
+  if (top[0][1] > 0) h += `<p class="hint" style="margin-top:8px">Leaning <b style="color:${ELEM[top[0][0]].c}">${top[0][0]}</b>: ${ELEM[top[0][0]].mood}.</p>`;
+  return h;
+}
+
+const LORE_ZODIAC = { t:'Music &amp; the zodiac', p:[
+  'Linking music and the cosmos goes back to the Pythagorean “music of the spheres”. Johannes Kepler’s <i>Harmonices Mundi</i> (1619) even assigned melodies to the planets. The circle of fifths and the zodiac share the same layout: twelve steps of 30°. This wheel uses one common modern mapping, with Aries on C, and other traditions place the signs differently.',
+  'The fit is striking. The four <b>elements</b> (fire, earth, air, water) each form a trine, and trines land on the four <b>augmented triads</b>, the same major-third shape as Coltrane’s triangles. The three <b>modalities</b> (cardinal, fixed, mutable) each form a square, which matches the three <b>diminished seventh</b> chords. Yang and yin signs alternate, just as Coltrane’s two whole-tone rings do. And an opposition (180°) is the tritone. Treat all of this as symbolism, not science.',
+]};
+
+/* =========================================================
+   Circles: each wheel owns its layout, palette, readings and lore
+   ========================================================= */
+const CIRCLES = {
+  western: {
+    label: 'Fifths', title: 'CIRCLE OF FIFTHS', aria: 'Circle of fifths', n: 12,
+    edges: EDGE_FIFTHS, legend: [1,2,3,4,5,6,0], figTitle: 'Sacred figures', bias: {},
+    examples: { 0:'C ↔ Am', 1:'G → C', 2:'B♭ → C', 3:'C → E♭ / A', 4:'B → G → E♭', 5:'D♭7 → C', 6:'G7 ↔ D♭7' },
+    yod: 'Two chords that both slide by half steps toward one destination.',
+    slotPc: i => FIFTHS[i],
+    pos(c) {
+      const fam = famOf(c);
+      if (fam === 'min') return { idx: fIdx(c.root + 3), r: R.nMin, band: [R.in0, R.in1] };
+      if (fam === 'dim') return { idx: fIdx(c.root + 1), r: R.nMin, band: [R.in0, R.in1] };
+      return { idx: fIdx(c.root), r: R.nMaj, band: [R.out0, R.out1] };
+    },
+    draw() {
+      let h = '';
+      for (let i = 0; i < 12; i++) {
+        const pc = FIFTHS[i], mpc = mod(pc + 9);
+        h += `<path class="sec" d="${arcPath(R.out0, R.out1, i)}" fill="#262a52" fill-opacity=".55" data-act="add" data-root="${pc}" data-ring="M" data-tip="note:${pc}:M"/>`;
+        h += `<path class="sec" d="${arcPath(R.in0, R.in1, i)}" fill="#1d2146" fill-opacity=".5" data-act="add" data-root="${mpc}" data-ring="m" data-tip="note:${mpc}:m"/>`;
+        const [x, y] = polar(392, i), [sx, sy] = polar(345, i), [mx, my] = polar(274, i);
+        h += label(x, y, NOTE[pc], 'note', 42);
+        h += label(sx, sy, keySig(i), 'sub', 12);
+        h += label(mx, my, NOTE[mpc] + 'm', 'note', 26, 'fill-opacity=".85"');
+      }
+      return h;
+    },
+    tipNote(pc, ring) {
+      const c = ring === 'm' ? { root: pc, q: 'm' } : { root: pc, q: 'M' };
+      const idx = ring === 'm' ? fIdx(pc + 3) : fIdx(pc);
+      let h = '';
+      if (ring === 'm') {
+        h += `<h4>${NOTE[pc]} minor</h4><p class="m">${chordNotes(c)} · key signature ${keySig(idx)}</p>`;
+        h += `<p><span class="k">Relative major</span> ${NOTE[mod(pc + 3)]}: the same notes, in the outer ring above it.</p>`;
+        h += `<p><span class="k">Neighbors</span> ${NOTE[mod(pc+5)]}m (iv) and ${NOTE[mod(pc+7)]}m (v). The harmonic-minor V is ${NOTE[mod(pc+7)]}7.</p>`;
+      } else {
+        h += `<h4>${NOTE[pc]} major</h4><p class="m">${chordNotes(c)} · key signature ${keySig(idx)}</p>`;
+        h += `<p><span class="k">Neighbors</span> ${NOTE[mod(pc+5)]} (IV, counter-clockwise) and ${NOTE[mod(pc+7)]} (V, clockwise) share 6 of 7 notes. These are the natural moves.</p>`;
+        h += `<p><span class="k">Relative minor</span> ${NOTE[mod(pc+9)]}m, just inside.</p>`;
+        h += `<p><span class="k">Opposite</span> ${NOTE[mod(pc+6)]}, the tritone and farthest key.</p>`;
+      }
+      if (S.astro) h += zodLine(ZOD[idx]);
+      return h + `<p class="m">Click to add ${chordName(c)} to your progression.</p>`;
+    },
+    edgeNote(a, b, d) {
+      return d !== ringDist(fIdx(a.root), fIdx(b.root), 12)
+        ? 'On this wheel the minor chords sit at their relative major, so the line shows how far apart the <i>key signatures</i> are.' : '';
+    },
+    figures(A) { return aspectFigures(A, this); },
+    balance: elementBalance,
+    astroChip: zodChip,
+    info: `<h4>Western circle of fifths</h4><p>The twelve major keys sit clockwise in rising fifths (C → G → D …). Each step adds one sharp or removes one flat. The <span class="k">inner ring</span> shows each key’s relative minor, which uses the same notes.</p><p>Neighbors share six of their seven notes, so moves to nearby keys sound smooth. Keys across the circle are the most distant.</p>`,
+    lore: [
+      { t:'The circle of fifths', p:[
+        'The fifth is the simplest interval after the octave: a 3:2 frequency ratio, so the two notes share many overtones and blend. Stack twelve fifths and you visit every key once before coming home. That is why neighbors here share six of seven notes, and why falling a fifth feels like gravity.',
+        'The first known drawing of the circle is in Nikolai Diletsky’s <i>Grammatika</i> (1679). Johann David Heinichen published his “musical circle” of major and minor keys in 1711.',
+      ]},
+      { t:'The comma that closes it', p:[
+        'Twelve pure 3:2 fifths overshoot seven octaves by about 23.5 cents, the <b>Pythagorean comma</b>, so pure fifths never quite meet. Equal temperament narrows each fifth by about 2 cents so the circle closes. That is why every key on a piano sounds equally in tune, and equally slightly out.',
+      ]},
+      LORE_ZODIAC,
+    ],
+  },
+
+  coltrane: {
+    label: 'Coltrane', title: 'COLTRANE CIRCLE', aria: 'Coltrane circle', n: 12, sevenths: true,
+    edges: EDGE_FIFTHS, legend: [1,2,3,4,5,6,0], figTitle: 'Sacred figures',
+    bias: { coltrane: 3.8, tritone: 1.6, fifth: 1.1 },
+    examples: { 0:'C ↔ Am', 1:'G → C', 2:'B♭ → C', 3:'C → E♭ / A', 4:'B → G → E♭', 5:'D♭7 → C', 6:'G7 ↔ D♭7' },
+    yod: 'Two chords that both slide by half steps toward one destination.',
+    slotPc: i => FIFTHS[i],
+    pos(c) {
+      const outer = c.root % 2 === 0;
+      return { idx: fIdx(c.root), r: outer ? R.nMaj : R.nMin, band: outer ? [R.out0, R.out1] : [R.in0, R.in1] };
+    },
+    draw() {
+      let h = '';
+      // sacred-geometry guides: 4 element triangles + 3 modality squares
+      for (let e = 0; e < 4; e++) {
+        const pts = [e, e + 4, e + 8].map(i => polar(e % 2 ? R.nMin : R.nMaj, i));
+        h += `<polygon points="${ptsAttr(pts)}" fill="none" stroke="${ELEM[ZOD[e].el].c}" stroke-opacity=".22" stroke-width="1.2"/>`;
+      }
+      for (let s = 0; s < 3; s++) {
+        const pts = [s, s + 3, s + 6, s + 9].map(i => polar(i % 2 ? R.nMin : R.nMaj, i));
+        h += `<polygon points="${ptsAttr(pts)}" fill="none" stroke="#a46bff" stroke-opacity=".12" stroke-dasharray="3 5"/>`;
+      }
+      // the fifths zigzag between the rings
+      const zz = [];
+      for (let i = 0; i <= 12; i++) zz.push(polar(i % 2 ? R.nMin : R.nMaj, i % 12));
+      h += `<polyline points="${ptsAttr(zz)}" fill="none" stroke="#f2b632" stroke-opacity=".14"/>`;
+
+      for (let i = 0; i < 12; i++) {
+        const pc = FIFTHS[i], outer = pc % 2 === 0;
+        const fill = outer ? '#262a52' : '#1d2146';
+        const [r0, r1] = outer ? [R.out0, R.out1] : [R.in0, R.in1];
+        const [e0, e1] = outer ? [R.in0, R.in1] : [R.out0, R.out1];
+        h += `<path class="sec empty" d="${arcPath(e0, e1, i)}" data-tip="ring:${outer ? 'in' : 'out'}"/>`;
+        h += `<path class="sec" d="${arcPath(r0, r1, i)}" fill="${fill}" fill-opacity=".55" data-act="add" data-root="${pc}" data-ring="c" data-tip="note:${pc}:c"/>`;
+        const [x, y] = polar((r0 + r1) / 2 - 10, i);
+        const [sx, sy] = polar((r0 + r1) / 2 + 36, i);
+        h += label(x, y, NOTE[pc], 'note', 38);
+        h += label(sx, sy, outer ? 'WT·I' : 'WT·II', 'sub', 11);
+      }
+      return h;
+    },
+    tipNote(pc, ring) {
+      if (ring !== 'c') return CIRCLES.western.tipNote(pc, ring);
+      const ringName = pc % 2 === 0 ? 'Whole-tone ring I (C D E F♯ G♯ B♭)' : 'Whole-tone ring II (D♭ E♭ F G A B)';
+      const tri = [0,4,8].map(o => NOTE[mod(pc + o)]).join(' – ');
+      const sq = [0,3,6,9].map(o => NOTE[mod(pc + o)]).join(' – ');
+      let h = `<h4>${NOTE[pc]}</h4><p class="m">${ringName}</p>`;
+      h += `<p><span class="k">Fifth neighbors</span> ${NOTE[mod(pc+5)]} and ${NOTE[mod(pc+7)]} sit on the other ring, which is why the circle zigzags.</p>`;
+      h += `<p><span class="k">Major-third triangle</span> ${tri}: Coltrane’s three tonal centers (an augmented triad).</p>`;
+      h += `<p><span class="k">Minor-third square</span> ${sq}: a diminished seventh chord.</p>`;
+      h += `<p><span class="k">Tritone</span> ${NOTE[mod(pc+6)]}, across the circle: its dominant 7th can stand in for ${NOTE[pc]}7.</p>`;
+      if (S.astro) h += zodLine(ZOD[fIdx(pc)]);
+      return h + `<p class="m">Click to add it to your progression.</p>`;
+    },
+    tipRing: out => out
+      ? `<h4>Whole-tone ring I</h4><p>C D E F♯ G♯ B♭. Every note a whole step from the next. In astrology these are the fire and air signs (yang).</p>`
+      : `<h4>Whole-tone ring II</h4><p>D♭ E♭ F G A B. The other whole-tone scale. In astrology these are the earth and water signs (yin).</p>`,
+    clickQ: (root, ring, k) => k && mod(root - k.tonic) === 7 ? '7' : 'maj7',
+    startQ: () => 'maj7',
+    edgeNote: (a, b, d) => d % 2 ? 'The line crosses between the two whole-tone rings.' : d ? 'Both chords sit on the same whole-tone ring.' : '',
+    figures(A) { return aspectFigures(A, this); },
+    balance: elementBalance,
+    astroChip: zodChip,
+    info: `<h4>Coltrane circle</h4><p>Based on the drawing John Coltrane gave Yusef Lateef. The 12 notes split into <span class="k">two whole-tone rings</span>: C D E F♯ G♯ B♭ and D♭ E♭ F G A B. Every fifth step zigzags from one ring to the other.</p><p>Faint triangles join notes a <span class="k">major third</span> apart. These are Coltrane’s “Giant Steps” tonal centers and also astrology’s element trines. Suggestions in this mode favor Coltrane substitutions and tritone subs.</p><p class="m">This is one common reading of the drawing; scholars interpret it in several ways.</p>`,
+    lore: [
+      { t:'Coltrane’s circle', p:[
+        'John Coltrane gave a hand-drawn diagram of the twelve tones to his friend, the multi-instrumentalist Yusef Lateef, who later published it in his <i>Repository of Scales and Melodic Patterns</i>. Musicians read the drawing in different ways. One common reading, used here, splits the twelve notes into two concentric rings, each a <b>whole-tone scale</b>. Every step around the circle of fifths jumps from one ring to the other, so the circle zigzags.',
+        'Pick every fourth note and you get a triangle of keys a major third apart. That’s the three-key system behind <i>Giant Steps</i> (1960), where the music jumps between B, G and E♭ instead of settling into one key.',
+      ]},
+      LORE_ZODIAC,
+    ],
+  },
+
+  chromatic: {
+    label: 'Chromatic', title: 'CHROMATIC CIRCLE', aria: 'Chromatic circle', n: 12,
+    edges: EDGE_CHROMA, legend: [1,2,3,4,5,6,0], figTitle: 'Sacred figures',
+    bias: { tritone: 1.8, coltrane: 1.4 },
+    examples: { 0:'C ↔ Cm', 1:'D♭7 → C', 2:'B♭ → C', 3:'C → E♭', 4:'C → E, C → A♭', 5:'G7 → C', 6:'G7 ↔ D♭7' },
+    yod: 'Two chords that both fall a fifth into one destination: a double dominant pull.',
+    slotPc: i => i,
+    pos(c) {
+      const minor = ['min','dim'].includes(famOf(c));
+      return { idx: c.root, r: minor ? R.nMin : R.nMaj, band: minor ? [R.in0, R.in1] : [R.out0, R.out1] };
+    },
+    draw() {
+      // the circle of fifths is still here, folded into a {12/5} star
+      let h = `<polyline points="${ptsAttr(starPts(R.nMaj, 12, 7))}" fill="none" stroke="${EDGE_CHROMA[5].color}" stroke-opacity=".12"/>`;
+      for (let pc = 0; pc < 12; pc++) {
+        const hue = `hsl(${mod(240 - pc * 30, 360)} 70% 60%)`;   // a color wheel around the twelve semitones
+        h += `<path class="sec" d="${arcPath(R.out0, R.out1, pc)}" fill="${hue}" fill-opacity=".14" data-act="add" data-root="${pc}" data-ring="M" data-tip="note:${pc}:M"/>`;
+        h += `<path class="sec" d="${arcPath(R.in0, R.in1, pc)}" fill="${hue}" fill-opacity=".07" data-act="add" data-root="${pc}" data-ring="m" data-tip="note:${pc}:m"/>`;
+        const [x, y] = polar(392, pc), [sx, sy] = polar(345, pc), [mx, my] = polar(274, pc);
+        h += label(x, y, NOTE[pc], 'note', 42);
+        h += label(sx, sy, pc, 'sub', 12, `style="fill:${hue}"`);
+        h += label(mx, my, NOTE[pc] + 'm', 'note', 26, 'fill-opacity=".85"');
+      }
+      return h;
+    },
+    // the chord itself, drawn as a polygon of its notes on the clock face
+    overlay(c) {
+      const P = QUAL[c.q].iv.map(i => mod(c.root + i)).sort((a, b) => a - b).map(pc => polar(R.hub - 14, pc));
+      return `<polygon points="${ptsAttr(P)}" fill="#fff4d6" fill-opacity=".05" stroke="#fff4d6" stroke-opacity=".4" stroke-dasharray="2 4"/>`;
+    },
+    shapes: {
+      M:    'a scalene triangle with arcs of 4, 3 and 5 semitones. Every major chord is this same triangle, turned.',
+      m:    'the major triangle flipped over (arcs 3, 4, 5). Minor is major’s mirror image, the idea behind Hugo Riemann’s harmonic dualism.',
+      '7':  'a quadrilateral whose diagonal is a tritone (the 3rd and 7th). That 180° line is the dominant’s tension, and its tritone substitution shares it.',
+      maj7: 'a shape that is its own mirror image: flip it and you get another maj7 chord.',
+      m7:   'a trapezoid that is its own mirror image: flip it and you get another m7 chord.',
+      dim:  'three corners of the diminished square, all 90° apart except one 180° gap.',
+      m7b5: 'the dominant seventh’s shape flipped over. Wagner’s “Tristan chord” is this shape.',
+    },
+    tipNote(pc, ring) {
+      const minor = ring === 'm', c = { root: pc, q: minor ? 'm' : 'M' };
+      let h = `<h4>${NOTE[pc]} ${minor ? 'minor' : 'major'}</h4><p class="m">${chordNotes(c)} · pitch class ${pc}</p>`;
+      h += minor
+        ? `<p><span class="k">Parallel major</span> ${NOTE[pc]}, just outside: same root, brighter third. Ending a minor piece on it is the “Picardy third”.</p>`
+        : `<p><span class="k">Parallel minor</span> ${NOTE[pc]}m, just inside: same root, lowered third. Borrowing between the two is called mode mixture.</p>`;
+      h += `<p><span class="k">Half-step neighbors</span> ${NOTE[mod(pc+1)]} above (${NOTE[mod(pc+1)]}7 is the tritone-sub dominant that slides into ${NOTE[pc]}) and ${NOTE[mod(pc-1)]} below, the leading tone.</p>`;
+      h += `<p><span class="k">Fifths</span> ${NOTE[mod(pc+7)]} and ${NOTE[mod(pc+5)]} sit 150° away. The closest keys on the fifths wheel are almost opposite here.</p>`;
+      h += `<p><span class="k">Opposite</span> ${NOTE[mod(pc+6)]}, the tritone.</p>`;
+      if (S.astro) h += zodLine(ZOD[pc]);
+      return h + `<p class="m">Click to add ${chordName(c)} to your progression.</p>`;
+    },
+    extraSugs({ k, r, fam, deg, add }) {
+      if (fam === 'maj' || fam === 'dom')
+        add(r, 'm', 'Parallel minor', `${NOTE[r]}m keeps the root and lowers the third: mode mixture, the Romantic composer’s light switch.`, 2.4, 'chromatic');
+      if (fam === 'min')
+        add(r, 'M', 'Parallel major (Picardy light)', `${NOTE[r]} major keeps the root and raises the third, like the Picardy third that ends so many Baroque minor pieces.`, 2.2, 'chromatic');
+      if (fam === 'maj') {
+        add(r + 4, 'M', 'Chromatic mediant (III)', `${NOTE[mod(r+4)]} shares one note with ${NOTE[r]}; the other two slide by half steps. A glowing, otherworldly shift (film scores love it).`, 2.3, 'chromatic');
+        add(r + 8, 'M', 'Chromatic mediant (♭VI)', `${NOTE[mod(r+8)]} keeps ${NOTE[r]} as a common tone while the rest sinks by half steps: Schubert’s and John Williams’s favorite magic.`, 2.3, 'chromatic');
+        add(r + 3, 'M', 'Chromatic mediant (♭III)', `${NOTE[mod(r+3)]} major, a minor third up: bold and heroic, one common tone.`, 1.7, 'chromatic');
+        add(r + 9, 'M', 'Chromatic mediant (VI)', `${NOTE[mod(r+9)]} major instead of the relative minor: same root motion, brighter third.`, 1.6, 'chromatic');
+        add(r + 1, 'M', 'Truck-driver key change', `Shift everything up a half step to ${NOTE[mod(r+1)]}. Pop’s favorite last-chorus lift (“Man in the Mirror”, “Love on Top”).`, 1.4, 'chromatic');
+      }
+      if (!k.minor ? [0, 2, 5].includes(deg) : [0, 5].includes(deg))
+        add(k.tonic + 1, 'M', 'Neapolitan ♭II', `${NOTE[mod(k.tonic+1)]} major, a half step above the tonic, leads to V with a sinking, operatic sigh (Beethoven’s “Moonlight” Sonata).`, 2.0, 'chromatic');
+    },
+    edgeNote: (a, b, d) => d === 5 ? 'This fifth would be the shortest line on the circle of fifths. Here it is almost the longest.'
+      : d === 1 ? 'This half step would be a long quincunx on the circle of fifths. Here it is the shortest line.' : '',
+    figures(A) { return aspectFigures(A, this); },
+    balance(A) {
+      const c = S.prog[S.playing] || S.prog[S.prog.length - 1];
+      const shape = c ? `<h3>Chord shape</h3><p class="hint">${chordName(c)} on the clock face (dashed, in the hub) is ${this.shapes[c.q]}</p>` : '';
+      return shape + elementBalance(A);
+    },
+    astroChip: zodChip,
+    info: `<h4>Chromatic circle</h4><p>The twelve notes in semitone order, like a clock: C on top, D♭ one step clockwise. The <span class="k">outer ring</span> holds major chords and the <span class="k">inner ring</span> their parallel minors, on the same root.</p><p>Here the shortest lines are half steps, so voice-leading moves (tritone subs, the Neapolitan, chromatic mediants) look smooth, and the circle of fifths becomes a twelve-pointed star. Suggestions in this mode lean toward those chromatic moves.</p><p>The dashed shape in the hub is your current chord, drawn on the clock face.</p>`,
+    lore: [
+      { t:'The chromatic clock', p:[
+        'Equal temperament divides the octave into twelve identical steps, each a frequency ratio of the twelfth root of 2 (about 1.0595). On this wheel every step is the same 30°, so it works like a clock. Post-tonal theorists number the notes 0–11 (C = 0) and read chords as polygons: transposing a chord rotates its shape, and inverting it flips the shape over.',
+      ]},
+      { t:'Two wheels, one rule', p:[
+        'Multiply each note number by 7 (mod 12) and the chromatic clock becomes the circle of fifths. Only half steps and fifths trade places; whole steps, thirds and the tritone keep their angles. That is why the cycle of fifths draws a twelve-pointed star here, and why a tritone substitution, which slides by half steps, looks smooth here and spiky on the fifths wheel.',
+      ]},
+      { t:'Why half steps grind', p:[
+        'Two tones close in pitch excite overlapping regions of the inner ear and beat against each other, a roughness Reinier Plomp and Willem Levelt measured in 1965. In a chord the half step is the harshest interval. In a melody it is the strongest pull, which is why leading tones and ♭II resolutions feel inevitable.',
+      ]},
+      { t:'Music &amp; the zodiac', p:[
+        'This wheel runs the signs up the chromatic scale, one per semitone, starting with Aries on C.',
+        'The elements still land on augmented triads and the modalities on diminished sevenths, because trines and squares are major and minor thirds on both wheels. Fire and air keep the same notes they have on the fifths wheel, while earth and water swap theirs. Treat it as symbolism, not science.',
+      ]},
+    ],
+  },
+
+  diatonic: {
+    label: 'Diatonic', aria: 'Diatonic circle', n: 7, keyed: true,
+    edges: EDGE_DIATONIC, legend: [1,2,3,0], figTitle: 'Figures',
+    bias: { function: 1.25, fifth: 1.1, relative: 0.9, tritone: 0.4, coltrane: 0.25, secondary: 0.6, borrowed: 0.6 },
+    examples: { 0:'B° → B♭ (in C major)', 1:'G → C, Dm → G', 2:'F → G, G → Am', 3:'C → Am, Am → F' },
+    hubTitle: () => keyName(dKey()).toUpperCase(),
+    legendNote: `<div class="lg" data-tip="info:dashed"><span class="ln" style="background:repeating-linear-gradient(90deg,var(--ink) 0 6px,transparent 6px 10px)"></span><span>Dashed line</span><span class="as">leaves the scale</span></div>`,
+    pos(c, k) {
+      k = k || dKey();
+      const { letter, alt } = diaPlace(c.root, k);
+      return { idx: dia(k).order.indexOf(letter), r: alt < 0 ? R.dLow : alt > 0 ? R.dHigh : R.dia, band: [R.in0, R.out1], alt };
+    },
+    draw() {
+      const k = dKey(), D = dia(k);
+      let h = '';
+      // the three figures of the heptagon: fifths {7}, steps {7/2}, thirds {7/3}
+      [[1, .16], [2, .1], [3, .1]].forEach(([step, op]) =>
+        h += `<polyline points="${ptsAttr(starPts(R.dia, 7, step))}" fill="none" stroke="${EDGE_DIATONIC[step].color}" stroke-opacity="${op}"/>`);
+      D.order.forEach((rel, i) => {
+        const c = diaChord(rel, k), pc = c.root, F = FUNC[D.func[rel]];
+        const tip = `data-act="add" data-root="${pc}" data-ring="d" data-tip="note:${pc}:d"`;
+        h += `<path class="sec" d="${arcPath(R.out0, R.out1, i)}" fill="${F.c}" fill-opacity=".13" ${tip}/>`;
+        h += `<path class="sec" d="${arcPath(R.in0, R.in1, i)}" fill="${F.c}" fill-opacity=".06" ${tip}/>`;
+        const [x, y] = polar(388, i), [sx, sy] = polar(342, i), [fx, fy] = polar(300, i), [px, py] = polar(254, i);
+        h += label(x, y, chordName(c), 'note', 38);
+        h += label(sx, sy, roman(c, k), 'sub', 13);
+        h += label(fx, fy, F.s.toUpperCase(), 'sub', 10.5, `letter-spacing="1.5" style="fill:${F.c}"`);
+        if (S.astro) h += label(px, py, PLANETS[i].g, 'note', 22, 'fill-opacity=".7"');
+      });
+      return h;
+    },
+    tipNote(pc) {
+      const k = dKey(), D = dia(k), rel = mod(pc - k.tonic);
+      if (!D.degs[rel]) {
+        const { letter, alt } = diaPlace(pc, k);
+        return `<h4>${NOTE[pc]} <span class="m">${ROMAN[rel]}</span></h4><p>Outside ${keyName(k)}. On this wheel its root sits just ${alt < 0 ? 'inside' : 'outside'} the ${ROMAN[letter]} slot, as a ${alt < 0 ? 'lowered' : 'raised'} scale degree, and its lines are dashed.</p>`;
+      }
+      const c = diaChord(rel, k), slot = D.order.indexOf(rel), F = FUNC[D.func[rel]];
+      const nb = n => chordName(diaChord(D.order[mod(slot + n, 7)], k));
+      let h = `<h4>${chordName(c)} <span class="m">${roman(c, k)}</span></h4><p class="m">${chordNotes(c)} · degree ${D.scale.indexOf(rel) + 1} of ${keyName(k)}</p>`;
+      h += `<p><span style="color:${F.c}">${F.n}</span> function: ${F.mood}.</p>`;
+      h += `<p><span class="k">Fifth neighbors</span> ${nb(-1)} (counter-clockwise) is where it naturally falls; ${nb(1)} leads into it. They share one note.</p>`;
+      h += `<p><span class="k">Third neighbors</span> ${nb(3)} and ${nb(-3)}, across the wheel, share two of its three notes.</p>`;
+      h += `<p><span class="k">Step neighbors</span> ${nb(2)} and ${nb(-2)} share none: clean changes.</p>`;
+      if (S.astro) { const P = PLANETS[slot]; h += `<hr><p>${P.g} <span class="k">${P.n}</span> · ${P.day}<br><span class="m">${P.kw}</span></p>`; }
+      return h + `<p class="m">Click to add it to your progression.</p>`;
+    },
+    clickQ(root, ring, k) {
+      k = k || dKey();
+      const rel = mod(root - k.tonic), d = dia(k).degs[rel];
+      return adaptQ(d ? DIAT_Q[d] : 'M', rel);
+    },
+    extraSugs({ k, r, add }) {
+      const D = dia(k), li = D.scale.indexOf(diaPlace(r, k).letter);
+      const at = n => diaChord(D.scale[mod(li + n, 7)], k);
+      const t3 = at(-2), u3 = at(2), st = at(1);
+      add(t3.root, t3.q, 'Down a third', `${chordName(t3)} shares two of three notes: the softest change there is (I–vi, vi–IV).`, 2.4, 'third');
+      add(st.root, st.q, 'Up a step', `${chordName(st)} shares no notes, so the change is clean and bright (IV–V, V–vi).`, 1.8, 'step');
+      add(u3.root, u3.q, 'Up a third', `${chordName(u3)} keeps two notes and brightens the color (I–iii, vi–I).`, 1.3, 'third');
+    },
+    edgeNote(a, b, d, pa, pb) {
+      if (pa.alt || pb.alt) return 'A dashed line: at least one of these roots lies outside the scale.';
+      return d === 1 && mod(b.root - a.root) === 6 ? 'This side of the heptagon is the scale’s one diminished fifth, the seam where the chain of fifths wraps around.' : '';
+    },
+    figures(A) {
+      const k = keyOf(A.prog); if (!k) return [];
+      const D = dia(k), F = [], rels = A.prog.map(c => mod(c.root - k.tonic));
+      const fn = rels.map(r => D.degs[r] ? D.func[r][0] : 'X').join('');
+      const pair = (a, b) => rels.some((r, i) => i && rels[i - 1] === a && r === b);
+      const diffs = A.pts.slice(1).map((p, i) => mod(p.idx - A.pts[i].idx, 7));
+      const run = s => { let best = 0, cur = 0; diffs.forEach(d => best = Math.max(best, cur = d === s ? cur + 1 : 0)); return best; };
+      if (/T.*P.*D.*T/.test(fn)) F.push({ n:'Full cadence T → PD → D → T', d:'Home, departure, tension, return: the complete arc that tonal music has used since the Baroque.' });
+      if (pair(7, 0)) F.push({ n:'Authentic cadence', d:'V → I: the leading tone rises to the tonic and the root falls a fifth. The strongest full stop in Western music.' });
+      if (pair(5, 0)) F.push({ n:'Plagal cadence', d:'IV → I, the “Amen” at the end of hymns: a soft landing without the leading tone.' });
+      if (pair(7, k.minor ? 8 : 9)) F.push({ n:'Deceptive cadence', d:'V → vi: the ear expects home and lands on its relative instead.' });
+      if (rels.length > 1 && rels[rels.length - 1] === 7) F.push({ n:'Half cadence', d:'Ending on V leaves the phrase open, like a question.' });
+      if (run(6) >= 3) F.push({ n:'Falling-fifths chain ↺', d:'Three or more falls of a fifth in a row, counter-clockwise around the heptagon: the engine of Baroque sequences, “Autumn Leaves” and “Fly Me to the Moon”.' });
+      if (run(3) >= 2) F.push({ n:'Falling thirds', d:'Each chord drops a third and keeps two notes, tracing the {7/3} star: the gentle descent of doo-wop’s I–vi–IV.' });
+      if (run(2) >= 2) F.push({ n:'Rising steps', d:'Climbing by steps traces the {7/2} star: IV–V–vi, or the ♭VI–♭VII–i climb of epic rock.' });
+      if (run(1) >= 3) F.push({ n:'Weekday walk', d:'Three or more rising fifths, clockwise: the planets in the order of the days of the week.', astro: true });
+      if (run(2) >= 3) F.push({ n:'Chaldean ladder', d:'Three or more steps up the scale: the planets in their ancient order, climbing sphere by sphere.', astro: true });
+      if (new Set(A.pts.filter(p => !p.alt).map(p => p.idx)).size === 7) F.push({ n:'Full heptagon', d:'Every degree of the scale visited: the whole key, and all seven classical planets.' });
+      return F;
+    },
+    balance(A) {
+      const k = keyOf(A.prog); if (!k) return '';
+      const D = dia(k), cnt = { T: 0, PD: 0, D: 0, X: 0 };
+      A.prog.forEach(c => { const rel = mod(c.root - k.tonic); cnt[D.degs[rel] ? D.func[rel] : 'X']++; });
+      let h = `<h3>Function balance</h3><div class="elems">` + Object.entries(cnt).map(([f, n]) =>
+        `<div class="elem" data-tip="func:${f}" style="border-color:${n ? FUNC[f].c + '66' : 'var(--line)'}"><b style="color:${FUNC[f].c}">${n}</b>${FUNC[f].s}</div>`).join('') + `</div>`;
+      const top = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
+      h += `<p class="hint" style="margin-top:8px">Leaning <b style="color:${FUNC[top[0]].c}">${FUNC[top[0]].n.toLowerCase()}</b>: ${FUNC[top[0]].mood}.</p>`;
+      if (S.astro) {
+        const slots = [...new Set(A.pts.filter(p => !p.alt).map(p => p.idx))].sort((a, b) => a - b);
+        h += `<p class="hint">Planets visited: ${slots.map(i => `<span title="${PLANETS[i].n}">${PLANETS[i].g}</span>`).join(' ')}</p>`;
+      }
+      return h;
+    },
+    astroChip: p => p.alt ? 'Off the heptagon: outside the scale, between the planets' : `${PLANETS[p.idx].g} ${PLANETS[p.idx].n} · ${PLANETS[p.idx].day}`,
+    info: `<h4>Diatonic circle</h4><p>The seven chords of one key, arranged by fifths into a heptagon (I, V, ii, vi, iii, vii°, IV). Your first chord sets the key; before that, the root and quality you pick do.</p><p>Neighbors are a fifth apart and share one note. Two slots apart is a step, with no shared notes. Three slots apart is a third, which shares two: the farthest points are the closest relatives. Chords from outside the key sit just inside a slot (flattened, like ♭VII) or just outside it (raised), and their lines are dashed.</p><p>The inner ring shows each chord’s function: tonic, pre-dominant or dominant. Suggestions here stay mostly inside the key.</p>`,
+    lore: [
+      { t:'Seven notes, six fifths', p:[
+        'Stack six fifths, F–C–G–D–A–E–B, and you have the white keys: the diatonic scale. This wheel puts the seven chords of a key in that fifths order, turned so your tonic sits on top. The seventh side (vii°–IV in major, ii°–♭VI in minor) is the scale’s one diminished fifth, where the chain wraps around.',
+      ]},
+      { t:'A deep scale', p:[
+        'Count every interval inside the scale and each kind appears a different number of times: two half steps, five whole steps, four minor thirds, three major thirds, six fourths or fifths and one tritone. Theorists call this a <b>deep scale</b>. Because no two degrees see the same set of intervals, each has its own character, and the ear can tell where home is.',
+      ]},
+      { t:'Common tones', p:[
+        'Triads a step apart share no notes, a fifth apart share one, a third apart share two. So on this wheel the farthest points are the closest relatives, and the {7/3} star of thirds is the smoothest path through a key.',
+      ]},
+      { t:'The planets and the days', p:[
+        'Ancient writers matched the seven classical planets to the seven notes. Put them up the scale in their traditional (“Chaldean”) order, starting with the Sun on the tonic, and the circle of fifths spells the days of the week: Sunday on I, Monday on V, Tuesday on ii, and so on.',
+        'The match is not a coincidence of this drawing. The Roman historian Cassius Dio, writing around 200 CE, explained the order of the planetary weekdays by the musical fourth. Treat the planetary reading as symbolism, not science.',
+      ]},
+      { t:'Seven colors, seven shapes', p:[
+        'Isaac Newton’s <i>Opticks</i> (1704) split the spectrum into seven colors and sized the arcs of his color circle after the steps of a musical scale (the Dorian mode on D). The regular heptagon itself cannot be drawn with compass and straightedge, as Gauss and Wantzel showed. Harmonic astrologers treat its angle, the septile, as the aspect of fate and inspiration.',
+      ]},
+    ],
+  },
+};
+const CIRCLE_ORDER = ['western', 'coltrane', 'chromatic', 'diatonic'];
+const nodePos = c => circle().pos(c, keyOf());
+
 /* =========================================================
    Suggestions
    ========================================================= */
 function suggest(prog = S.prog) {
   if (!prog.length) return [];
-  const k = keyOf(prog), last = prog[prog.length - 1], r = last.root;
-  const fam = famOf(last), deg = mod(r - k.tonic), C = isCol();
+  const C = circle(), k = keyOf(prog), last = prog[prog.length - 1], r = last.root;
+  const fam = famOf(last), deg = mod(r - k.tonic);
   const list = [];
   const add = (root, q, title, why, score, tag) => {
     root = mod(root);
-    list.push({ chord: { root, q: adaptQ(q, mod(root - k.tonic)) }, title, why, score, tag });
+    list.push({ chord: { root, q: adaptQ(q, mod(root - k.tonic)) }, title, why, score: score * (C.bias[tag] ?? 1), tag });
   };
   const diat = root => { const d = (k.minor ? MIN_D : MAJ_D)[mod(root - k.tonic)]; return d ? DIAT_Q[d] : null; };
 
@@ -606,9 +1084,9 @@ function suggest(prog = S.prog) {
 
   // 2. down a fifth
   if (fam === 'dom') add(r + 5, diat(r + 5) || 'M', 'Resolve the dominant',
-    `${chordName(last)} has a tritone inside it (its 3rd and 7th) that wants to collapse inward, so it falls a fifth to ${NOTE[mod(r+5)]}.`, C ? 4.5 : 4, 'fifth');
+    `${chordName(last)} has a tritone inside it (its 3rd and 7th) that wants to collapse inward, so it falls a fifth to ${NOTE[mod(r+5)]}.`, 4, 'fifth');
   else add(r + 5, diat(r + 5) || (fam === 'min' ? 'm' : 'M'), 'Next step around the circle',
-    `Moving down a fifth (one step counter-clockwise) is the strongest, most natural root motion.`, 2.2, 'fifth');
+    `Moving down a fifth is the strongest, most natural root motion.`, 2.2, 'fifth');
 
   // 3. relative major / minor
   if (fam === 'maj' || fam === 'dom') add(r + 9, 'm', 'Relative minor', `${NOTE[mod(r+9)]}m uses the same key signature as ${NOTE[r]}. Same notes, darker light.`, 1.6, 'relative');
@@ -616,18 +1094,18 @@ function suggest(prog = S.prog) {
 
   // 4. tritone substitution
   if (fam === 'dom') {
-    add(r + 6, '7', 'Tritone substitution', `${NOTE[mod(r+6)]}7 has the same tritone (the 3rd and 7th swap places) as ${chordName(last)}, so it can stand in for it. The bass jumps across the circle.`, C ? 3 : 1.8, 'tritone');
-    add(r - 1, 'M', 'Half-step resolution', `If ${chordName(last)} is acting as a tritone sub, it slides down a half step to ${NOTE[mod(r-1)]}.`, C ? 2.6 : 1.4, 'tritone');
+    add(r + 6, '7', 'Tritone substitution', `${NOTE[mod(r+6)]}7 has the same tritone (the 3rd and 7th swap places) as ${chordName(last)}, so it can stand in for it. The bass jumps a tritone.`, 1.8, 'tritone');
+    add(r - 1, 'M', 'Half-step resolution', `If ${chordName(last)} is acting as a tritone sub, it slides down a half step to ${NOTE[mod(r-1)]}.`, 1.4, 'tritone');
   }
   if (fam === 'min') add(r + 11, '7', 'Tritone-sub dominant (♭II7)',
-    `Instead of the V7 after ${chordName(last)}, use ${NOTE[mod(r+11)]}7: same guide tones, with a bass line that slides down in half steps.`, C ? 2.8 : 1.7, 'tritone');
+    `Instead of the V7 after ${chordName(last)}, use ${NOTE[mod(r+11)]}7: same guide tones, with a bass line that slides down in half steps.`, 1.7, 'tritone');
 
   // 5. Coltrane major-third cycles
   if (fam === 'maj') {
-    add(r + 3, '7', 'Coltrane pivot', `In Giant Steps style, ${NOTE[mod(r+3)]}7 is the V7 of ${NOTE[mod(r+8)]}, a key a major third below ${NOTE[r]}. It sets up a jump to a new tonal center.`, C ? 4.2 : 1.1, 'coltrane');
-    add(r + 8, 'M', 'Giant step down', `Jump straight to ${NOTE[mod(r+8)]}, a major third down: one side of Coltrane’s triangle (a trine).`, C ? 3.6 : 1, 'coltrane');
-    add(r + 4, 'M', 'Giant step up', `Leap a major third up to ${NOTE[mod(r+4)]}. Same triangle, other direction.`, C ? 3.2 : 0.9, 'coltrane');
-    add(r + 11, '7', 'Pivot to the upper center', `${NOTE[mod(r+11)]}7 is the V7 of ${NOTE[mod(r+4)]}, the center a major third up.`, C ? 2.9 : 0.6, 'coltrane');
+    add(r + 3, '7', 'Coltrane pivot', `In Giant Steps style, ${NOTE[mod(r+3)]}7 is the V7 of ${NOTE[mod(r+8)]}, a key a major third below ${NOTE[r]}. It sets up a jump to a new tonal center.`, 1.1, 'coltrane');
+    add(r + 8, 'M', 'Giant step down', `Jump straight to ${NOTE[mod(r+8)]}, a major third down: one side of Coltrane’s triangle (a trine).`, 1, 'coltrane');
+    add(r + 4, 'M', 'Giant step up', `Leap a major third up to ${NOTE[mod(r+4)]}. Same triangle, other direction.`, 0.9, 'coltrane');
+    add(r + 11, '7', 'Pivot to the upper center', `${NOTE[mod(r+11)]}7 is the V7 of ${NOTE[mod(r+4)]}, the center a major third up.`, 0.6, 'coltrane');
   }
 
   // 6. secondary dominants & borrowed chords (major keys)
@@ -638,7 +1116,10 @@ function suggest(prog = S.prog) {
     add(k.tonic + 8, 'M', 'Borrowed ♭VI', `${NOTE[mod(k.tonic+8)]} from the parallel minor. Cinematic and heroic.`, 1.1, 'borrowed');
   }
 
-  // 7. home
+  // 7. moves native to the current circle
+  C.extraSugs?.({ k, last, r, fam, deg, add });
+
+  // 8. home
   if (deg !== 0 || fam !== (k.minor ? 'min' : 'maj'))
     add(k.tonic, k.minor ? 'm' : 'M', 'Return home', `Land on the tonic, ${keyName(k)}, to close the shape.`, 1.8, 'home');
 
@@ -687,11 +1168,12 @@ function matchSongs(prog = S.prog) {
    Geometry analysis
    ========================================================= */
 function edgesOf(prog) {
-  const pts = prog.map(nodePos), E = [];
+  // each progression is placed against its own key, so ghost layers line up by function on the diatonic wheel
+  const C = circle(), k = keyOf(prog), pts = prog.map(c => C.pos(c, k)), E = [];
   for (let i = 1; i < prog.length; i++) {
     const a = pts[i - 1], b = pts[i];
     if (a.idx === b.idx && a.r === b.r) continue;
-    E.push({ i, a, b, d: stepDist(a.idx, b.idx) });
+    E.push({ i, a, b, d: ringDist(a.idx, b.idx), x: !!(a.alt || b.alt) });
   }
   return { pts, E };
 }
@@ -702,47 +1184,24 @@ function hexMix(cols) {
   const h = v => Math.round(v / cols.length).toString(16).padStart(2,'0');
   return '#' + h(r) + h(g) + h(b);
 }
-function figures(idxSet) {
-  const has = i => idxSet.has(mod(i)), F = [];
-  const seen = new Set(), push = (key, f) => { if (!seen.has(key)) { seen.add(key); F.push(f); } };
-  for (let i = 0; i < 12; i++) {
-    if (has(i) && has(i+4) && has(i+8)) {
-      const notes = [i, i+4, i+8].map(j => NOTE[FIFTHS[mod(j)]]).join('–');
-      push('gt' + i % 4, { n:'Grand Trine △', d:`Three points 120° apart (${notes}): an augmented triad and one of Coltrane’s three-key triangles. In astrology it’s a closed circuit of ${ZOD[mod(i)].el} energy, effortless and self-contained.` });
-      if (has(i+6)) push('kite' + i, { n:'Kite ◇', d:'A Grand Trine with one point opposite it. The tritone gives the easy triangle a direction to fly in.' });
-    }
-    if (has(i) && has(i+3) && has(i+6) && has(i+9))
-      push('gc' + i % 3, { n:'Grand Cross ✚', d:`Four points 90° apart: a diminished seventh chord, symmetrical and restless. Astrologically it’s the ${ZOD[mod(i)].mo} cross, four forces pulling in four directions.` });
-    else if (has(i) && has(i+6) && has(i+3))
-      push('ts' + i, { n:'T-Square ⊤', d:'An opposition (tritone) with a third point squaring both ends. That’s the shape of a dominant 7th’s tritone plus a diminished pull: high tension that has to resolve.' });
-    if (has(i) && has(i+2) && has(i+6) && has(i+8))
-      push('mr' + i % 6, { n:'Mystic Rectangle ▭', d:'Two oppositions bridged by sextiles and trines. Tension held in a balanced frame, like two tritone substitutions side by side.' });
-    if (has(i) && has(i+2) && has(i+7))
-      push('yod' + i, { n:'Yod ✶ (“Finger of God”)', d:'Two points a sextile apart both reaching a third point by quincunx (150°). Two chords that both slide by half steps toward one destination.' });
-  }
-  for (let p = 0; p < 2; p++) if ([0,2,4,6,8,10].every(j => has(j + p)))
-    push('hex' + p, { n:'Hexagram ✡', d:`All six points of one whole-tone ring: one whole of Coltrane’s two rings. In astrology, all six ${p ? 'yin (earth & water)' : 'yang (fire & air)'} signs.` });
-  return F;
-}
 function analyze(prog = S.prog) {
-  const { pts, E } = edgesOf(prog);
+  const C = circle(), EDGE = C.edges, { pts, E } = edgesOf(prog);
   const counts = {}; E.forEach(e => counts[e.d] = (counts[e.d] || 0) + 1);
   const order = Object.keys(counts).map(Number).sort((a, b) => counts[b] - counts[a] || b - a);
   const dom = order[0], sec = order[1];
-  const idxSet = new Set(pts.map(p => p.idx));
   let name, feel;
   if (!prog.length) { name = 'An empty sky'; feel = 'Pick a starting chord on the left, or click any key on the wheel.'; }
   else if (!E.length) { name = 'A single star'; feel = 'One point of light. Add a second chord to draw your first line.'; }
   else if (order.length === 1) { name = EDGE[dom].shape; feel = EDGE[dom].feel; }
   else {
     name = `${EDGE[dom].short} constellation`;
-    feel = `${EDGE[dom].feel} Accents of ${EDGE[sec].short.toLowerCase()} (${EDGE[sec].name.toLowerCase()}) add ${({0:'shifts of light',1:'warm resolution',2:'bright lift',3:'noir tension',4:'cosmic surprise',5:'chromatic slink',6:'polar electricity'})[sec]}.`;
+    feel = `${EDGE[dom].feel} Accents of ${EDGE[sec].short.toLowerCase()} (${EDGE[sec].name.toLowerCase()}) add ${EDGE[sec].acc}.`;
   }
   const closed = prog.length > 2 && sameChord(prog[0], prog[prog.length - 1]);
   const color = hexMix(E.map(e => EDGE[e.d].color));
-  const elems = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
-  idxSet.forEach(i => elems[ZOD[i].el]++);
-  return { pts, E, counts, name, feel, closed, color, elems, figs: figures(idxSet), distinct: idxSet.size };
+  const A = { prog, pts, E, counts, name, feel, closed, color };
+  A.figs = C.figures(A).filter(f => S.astro || !f.astro);
+  return A;
 }
 
 /* =========================================================
@@ -752,29 +1211,20 @@ const $ = id => document.getElementById(id);
 const gStatic = $('gStatic'), gGhost = $('gGhost'), gLines = $('gLines'), gPreview = $('gPreview'), gNodes = $('gNodes');
 let labels = [];
 
-function arcPath(r0, r1, idx, gap = 0.7) {
-  const a0 = (idx * 30 - 105 + gap) * D2R, a1 = (idx * 30 - 75 - gap) * D2R;
-  const p = (r, a) => `${f2(r * Math.cos(a))} ${f2(r * Math.sin(a))}`;
-  return `M${p(r1,a0)} A${r1} ${r1} 0 0 1 ${p(r1,a1)} L${p(r0,a1)} A${r0} ${r0} 0 0 0 ${p(r0,a0)} Z`;
-}
-function label(x, y, text, cls, size, extra = '') {
-  return `<text class="lbl ${cls}" x="${f2(x)}" y="${f2(y)}" data-x="${f2(x)}" data-y="${f2(y)}" font-size="${size}" ${extra}>${text}</text>`;
-}
-function keySig(idx) { return idx === 0 ? '0♯ 0♭' : idx < 6 ? `${idx}♯` : idx === 6 ? '6♯/6♭' : `${12 - idx}♭`; }
-
 function renderStatic() {
+  const C = circle(), n = C.n, sd = 360 / n;
   let h = '';
   // hub
   h += `<circle r="${R.hub}" fill="url(#hubGrad)" stroke="rgba(238,231,212,.12)"/>`;
   // night sky
   h += `<circle r="${R.hub}" fill="url(#nebula)"/>`;
   SKY.forEach(st => h += `<circle cx="${f2(st.x)}" cy="${f2(st.y)}" r="${f2(st.r)}" fill="#fff8e6" fill-opacity="${f2(st.o)}"${st.tw ? ' class="twinkle"' : ''}/>`);
-  // astrolabe: degree ticks around the rim, ecliptic circles, house lines
-  for (let deg = 0; deg < 360; deg += 5) {
-    const major = deg % 30 === 0, a = (deg - 90) * D2R, r1 = R.hub - (major ? 14 : 6);
+  // astrolabe: ticks around the rim (six per slot), ecliptic circles, house lines
+  for (let j = 0; j < n * 6; j++) {
+    const major = j % 6 === 0, a = (j * sd / 6 - 90) * D2R, r1 = R.hub - (major ? 14 : 6);
     h += `<line x1="${f2(R.hub * Math.cos(a))}" y1="${f2(R.hub * Math.sin(a))}" x2="${f2(r1 * Math.cos(a))}" y2="${f2(r1 * Math.sin(a))}" stroke="rgba(238,231,212,${major ? .35 : .14})"/>`;
   }
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < n; i++) {
     const [x, y] = polar(R.hub - 14, i - 0.5);
     h += `<line x1="0" y1="0" x2="${f2(x)}" y2="${f2(y)}" stroke="rgba(238,231,212,.04)"/>`;
   }
@@ -782,69 +1232,30 @@ function renderStatic() {
   h += `<circle r="96" fill="none" stroke="rgba(238,231,212,.06)" stroke-dasharray="1 5"/>`;
   h += `<circle r="${R.nMaj}" fill="none" stroke="rgba(238,231,212,.06)" stroke-dasharray="2 6"/>`;
   h += `<circle r="${R.nMin}" fill="none" stroke="rgba(238,231,212,.05)" stroke-dasharray="2 6"/>`;
-
-  if (isCol()) {
-    // sacred-geometry guides: 4 element triangles + 3 modality squares
-    for (let e = 0; e < 4; e++) {
-      const pts = [e, e + 4, e + 8].map(i => polar(e % 2 ? R.nMin : R.nMaj, i));
-      h += `<polygon points="${pts.map(p => p.map(f2).join(',')).join(' ')}" fill="none" stroke="${ELEM[ZOD[e].el].c}" stroke-opacity=".22" stroke-width="1.2"/>`;
-    }
-    for (let s = 0; s < 3; s++) {
-      const pts = [s, s + 3, s + 6, s + 9].map(i => polar(i % 2 ? R.nMin : R.nMaj, i));
-      h += `<polygon points="${pts.map(p => p.map(f2).join(',')).join(' ')}" fill="none" stroke="#a46bff" stroke-opacity=".12" stroke-dasharray="3 5"/>`;
-    }
-    // the fifths zigzag between the rings
-    const zz = [];
-    for (let i = 0; i <= 12; i++) zz.push(polar(i % 2 ? R.nMin : R.nMaj, i % 12));
-    h += `<polyline points="${zz.map(p => p.map(f2).join(',')).join(' ')}" fill="none" stroke="#f2b632" stroke-opacity=".14"/>`;
-
-    for (let i = 0; i < 12; i++) {
-      const pc = FIFTHS[i], outer = pc % 2 === 0;
-      const fill = outer ? '#262a52' : '#1d2146';
-      const [r0, r1] = outer ? [R.out0, R.out1] : [R.in0, R.in1];
-      const [e0, e1] = outer ? [R.in0, R.in1] : [R.out0, R.out1];
-      h += `<path class="sec empty" d="${arcPath(e0, e1, i)}" data-tip="ring:${outer ? 'in' : 'out'}"/>`;
-      h += `<path class="sec" d="${arcPath(r0, r1, i)}" fill="${fill}" fill-opacity=".55" data-act="add" data-root="${pc}" data-ring="c" data-tip="note:${pc}:c"/>`;
-      const [x, y] = polar((r0 + r1) / 2 - 10, i);
-      const [sx, sy] = polar((r0 + r1) / 2 + 36, i);
-      h += label(x, y, NOTE[pc], 'note', 38);
-      h += label(sx, sy, outer ? 'WT·I' : 'WT·II', 'sub', 11);
-    }
-  } else {
-    for (let i = 0; i < 12; i++) {
-      const pc = FIFTHS[i], mpc = mod(pc + 9);
-      h += `<path class="sec" d="${arcPath(R.out0, R.out1, i)}" fill="#262a52" fill-opacity=".55" data-act="add" data-root="${pc}" data-ring="M" data-tip="note:${pc}:M"/>`;
-      h += `<path class="sec" d="${arcPath(R.in0, R.in1, i)}" fill="#1d2146" fill-opacity=".5" data-act="add" data-root="${mpc}" data-ring="m" data-tip="note:${mpc}:m"/>`;
-      const [x, y] = polar(392, i), [sx, sy] = polar(345, i), [mx, my] = polar(274, i);
-      h += label(x, y, NOTE[pc], 'note', 42);
-      h += label(sx, sy, keySig(i), 'sub', 12);
-      h += label(mx, my, NOTE[mpc] + 'm', 'note', 26, 'fill-opacity=".85"');
-    }
-  }
-  gStatic.innerHTML = h;
+  gStatic.innerHTML = h + C.draw();
 }
 
 function edgeSvg(a, b, d, opts = {}) {
   const [x1, y1] = polar(a.r, a.idx), [x2, y2] = polar(b.r, b.idx);
-  const col = EDGE[d].color;
+  const col = circle().edges[d].color;
   const w = opts.w || 3.6, op = opts.op ?? 1;
-  let s = `<line x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-opacity="${op}" ${opts.glow ? 'filter="url(#glow)"' : ''} ${opts.cls ? `class="${opts.cls}"` : ''}/>`;
+  let s = `<line x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-opacity="${op}" ${opts.x ? 'stroke-dasharray="7 7"' : ''} ${opts.glow ? 'filter="url(#glow)"' : ''} ${opts.cls ? `class="${opts.cls}"` : ''}/>`;
   if (opts.tip) s += `<line class="edge-hit" x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}" data-tip="${opts.tip}"/>`;
   return s;
 }
 function polySvg(pts, color, op) {
   if (new Set(pts.map(p => p.idx + ':' + p.r)).size < 3) return '';
-  const P = pts.map(p => polar(p.r, p.idx).map(f2).join(',')).join(' ');
-  return `<polygon points="${P}" fill="${color}" fill-opacity="${op}" fill-rule="evenodd" stroke="none"/>`;
+  return `<polygon points="${ptsAttr(pts.map(p => polar(p.r, p.idx)))}" fill="${color}" fill-opacity="${op}" fill-rule="evenodd" stroke="none"/>`;
 }
 
 function renderDynamic() {
+  const C = circle();
   // ghosts: earlier patterns, kept as layers of the mandala
   let g = '';
-  S.ghosts.forEach((prog, gi) => {
+  S.ghosts.forEach(prog => {
     const { pts, E } = edgesOf(prog);
-    g += polySvg(pts, hexMix(E.map(e => EDGE[e.d].color)), 0.035);
-    E.forEach(e => g += edgeSvg(e.a, e.b, e.d, { w: 1.6, op: 0.32 }));
+    g += polySvg(pts, hexMix(E.map(e => C.edges[e.d].color)), 0.035);
+    E.forEach(e => g += edgeSvg(e.a, e.b, e.d, { w: 1.6, op: 0.32, x: e.x }));
     new Set(pts.map(p => p.idx + ':' + p.r)).forEach(key => {
       const [idx, r] = key.split(':').map(Number), [x, y] = polar(r, idx);
       g += `<circle cx="${f2(x)}" cy="${f2(y)}" r="2.2" fill="#fff8e6" fill-opacity=".45"/>`;
@@ -854,32 +1265,30 @@ function renderDynamic() {
 
   // current progression
   const A = analyze();
-  let l = polySvg(A.pts, A.color, 0.1);
-  A.E.forEach((e, n) => l += edgeSvg(e.a, e.b, e.d, { glow: true, tip: `edge:${e.i}` }));
+  const last = S.prog[S.prog.length - 1], shown = S.prog[S.playing] || last;
+  let l = C.overlay && shown ? C.overlay(shown) : '';
+  l += polySvg(A.pts, A.color, 0.1);
+  A.E.forEach(e => l += edgeSvg(e.a, e.b, e.d, { glow: true, tip: `edge:${e.i}`, x: e.x }));
   gLines.innerHTML = l;
 
   // highlight last chord's sector, nodes, suggestion markers
   let h = '';
-  const last = S.prog[S.prog.length - 1];
   const k = keyOf();
-  // hub text
-  h += label(0, -16, k ? keyName(k).toUpperCase() : (isCol() ? 'COLTRANE CIRCLE' : 'CIRCLE OF FIFTHS'), 'sub', 13, 'fill-opacity=".55" letter-spacing="3"');
+  h += label(0, -16, k ? keyName(k).toUpperCase() : (C.hubTitle ? C.hubTitle() : C.title), 'sub', 13, 'fill-opacity=".55" letter-spacing="3"');
   h += label(0, 26, last ? chordName(last) : '✦', 'note', 46, 'fill-opacity=".22"');
   if (last) {
     const p = nodePos(last);
-    const ring = isCol() ? (last.root % 2 === 0 ? [R.out0, R.out1] : [R.in0, R.in1])
-                         : (p.r === R.nMaj ? [R.out0, R.out1] : [R.in0, R.in1]);
-    h += `<path d="${arcPath(ring[0], ring[1], p.idx, 0.2)}" fill="none" stroke="#e8b85a" stroke-width="3" class="pulse lbl" style="pointer-events:none"/>`;
+    h += `<path d="${arcPath(p.band[0], p.band[1], p.idx, 0.2)}" fill="none" stroke="#e8b85a" stroke-width="3" class="pulse lbl" style="pointer-events:none"/>`;
   }
   S.sugs.forEach((s, i) => {
     const p = nodePos(s.chord), lp = nodePos(last);
-    const d = stepDist(lp.idx, p.idx);
+    const d = ringDist(lp.idx, p.idx);
     const [x, y] = polar(p.r, p.idx);
-    h += `<circle class="sugmark" cx="${f2(x)}" cy="${f2(y)}" r="9" fill="rgba(10,12,24,.8)" stroke="${EDGE[d].color}" stroke-width="2" stroke-dasharray="3 3" data-act="sug" data-i="${i}" data-tip="sug:${i}"/>`;
+    h += `<circle class="sugmark" cx="${f2(x)}" cy="${f2(y)}" r="9" fill="rgba(10,12,24,.8)" stroke="${C.edges[d].color}" stroke-width="2" stroke-dasharray="3 3" data-act="sug" data-i="${i}" data-tip="sug:${i}"/>`;
   });
   const seen = new Map();
-  S.prog.forEach((c, i) => seen.set(nodePos(c).idx + ':' + nodePos(c).r, i));
-  seen.forEach((i, key) => {
+  S.prog.forEach((c, i) => { const p = nodePos(c); seen.set(p.idx + ':' + p.r, i); });
+  seen.forEach(i => {
     const p = nodePos(S.prog[i]);
     const [x, y] = polar(p.r, p.idx);
     const isLast = i === S.prog.length - 1, isPlay = i === S.playing;
@@ -898,7 +1307,7 @@ function renderPreview() {
   const last = S.prog[S.prog.length - 1];
   if (S.preview == null || !last || !S.sugs[S.preview]) { gPreview.innerHTML = ''; return; }
   const a = nodePos(last), b = nodePos(S.sugs[S.preview].chord);
-  gPreview.innerHTML = edgeSvg(a, b, stepDist(a.idx, b.idx), { w: 2.6, op: .9, cls: 'preview' });
+  gPreview.innerHTML = edgeSvg(a, b, ringDist(a.idx, b.idx), { w: 2.6, op: .9, cls: 'preview' });
 }
 
 function collectLabels() {
@@ -925,6 +1334,11 @@ function tick() {
 /* =========================================================
    Panels
    ========================================================= */
+function renderModes() {
+  $('modes').innerHTML = CIRCLE_ORDER.map(id =>
+    `<button class="${id === S.mode ? 'on' : ''}" role="tab" aria-selected="${id === S.mode}" data-mode="${id}" data-tip="mode:${id}">${CIRCLES[id].label}</button>`).join('');
+}
+
 function renderBuilder() {
   $('roots').innerHTML = NOTE.map((n, pc) =>
     `<button class="${pc === S.pickRoot ? 'on' : ''}" data-root="${pc}" data-tip="pick:${pc}">${n}</button>`).join('');
@@ -940,7 +1354,7 @@ function renderProg() {
     ? `Key: <b>${keyName(k)}</b> <span class="hint">· set by your first chord</span>`
     : `<span class="hint">No key yet. Your first chord sets it.</span>`;
   if (!S.prog.length) { $('prog').innerHTML = `<span class="empty">Empty. Choose a chord above, click the wheel, or press ✦ Randomize.</span>`; return; }
-  const { E } = edgesOf(S.prog);
+  const { E } = edgesOf(S.prog), EDGE = circle().edges;
   const edgeAt = new Map(E.map(e => [e.i, e.d]));
   $('prog').innerHTML = S.prog.map((c, i) => {
     const arrow = i > 0 ? `<span class="arrow" style="background:${edgeAt.has(i) ? EDGE[edgeAt.get(i)].color : 'var(--line-2)'}"></span>` : '';
@@ -951,10 +1365,10 @@ function renderProg() {
 function renderSugs() {
   const el = $('sugs');
   if (!S.prog.length) { el.innerHTML = `<p class="hint">Start a progression to see which chords tend to come next, and why.</p>`; return; }
-  const last = S.prog[S.prog.length - 1], lp = nodePos(last), k = keyOf();
+  const last = S.prog[S.prog.length - 1], lp = nodePos(last), k = keyOf(), EDGE = circle().edges;
   el.innerHTML = S.sugs.map((s, i) => {
-    const d = stepDist(lp.idx, nodePos(s.chord).idx);
-    const dots = '●'.repeat(Math.max(1, Math.min(4, Math.round(s.score)))) ;
+    const d = ringDist(lp.idx, nodePos(s.chord).idx);
+    const dots = '●'.repeat(Math.max(1, Math.min(4, Math.round(s.score))));
     return `<button class="sug" data-act="sug" data-i="${i}" data-tip="sug:${i}">
       <span class="nm">${chordName(s.chord)}<small>${roman(s.chord, k)}</small></span>
       <span class="tt">${s.title}</span>
@@ -965,21 +1379,16 @@ function renderSugs() {
 }
 
 function renderAnalysis() {
-  const A = analyze();
+  const C = circle(), A = analyze(), EDGE = C.edges;
   const total = A.E.length || 1;
   let h = `<p class="shape-name">${A.name}${A.closed ? ' <span class="hint" style="font-family:var(--sans)">· closed loop</span>' : ''}</p>`;
   h += `<div class="swatch-row"><span class="orb" style="background:${A.color};color:${A.color}"></span><p class="hint" style="color:#d6cfbd">${A.feel}</p></div>`;
   if (A.E.length) {
-    h += `<h3>Lines in this shape</h3><div class="bars">` + [1,2,3,4,5,6,0].filter(d => A.counts[d]).map(d =>
+    h += `<h3>Lines in this shape</h3><div class="bars">` + C.legend.filter(d => A.counts[d]).map(d =>
       `<div class="bar" data-tip="legend:${d}"><span>${EDGE[d].short}</span><span class="track"><span class="fill" style="width:${A.counts[d] / total * 100}%;background:${EDGE[d].color}"></span></span><span class="ct">${A.counts[d]}</span></div>`).join('') + `</div>`;
   }
-  if (S.astro && S.prog.length) {
-    if (A.figs.length) h += `<h3>Sacred figures</h3><div>` + A.figs.map((f, i) => `<span class="tag" data-tip="fig:${i}">${f.n}</span>`).join('') + `</div>`;
-    h += `<h3>Elemental balance</h3><div class="elems">` + Object.entries(A.elems).map(([e, n]) =>
-      `<div class="elem" data-tip="elem:${e}" style="border-color:${n ? ELEM[e].c + '66' : 'var(--line)'}"><b style="color:${ELEM[e].c}">${n}</b>${e}</div>`).join('') + `</div>`;
-    const top = Object.entries(A.elems).sort((a, b) => b[1] - a[1]);
-    if (top[0][1] > 0) h += `<p class="hint" style="margin-top:8px">Leaning <b style="color:${ELEM[top[0][0]].c}">${top[0][0]}</b>: ${ELEM[top[0][0]].mood}.</p>`;
-  }
+  if (S.prog.length && A.figs.length) h += `<h3>${C.figTitle}</h3><div>` + A.figs.map((f, i) => `<span class="tag" data-tip="fig:${i}">${f.n}</span>`).join('') + `</div>`;
+  h += C.balance(A);
   $('analysis').innerHTML = h;
   analysisCache = A;
 }
@@ -1005,75 +1414,55 @@ function renderSongs() {
 let songCache = [];
 
 function renderLegend() {
-  $('legend').innerHTML = [1,2,3,4,5,6,0].map(d =>
-    `<div class="lg" data-tip="legend:${d}"><span class="ln" style="background:${EDGE[d].color};box-shadow:0 0 8px ${EDGE[d].color}"></span><span>${EDGE[d].short} <span class="hint" style="font-size:11.5px">${EDGE[d].ang}</span></span><span class="as">${EDGE[d].asp}</span></div>`).join('');
+  const C = circle();
+  $('legend').innerHTML = C.legend.map(d =>
+    `<div class="lg" data-tip="legend:${d}"><span class="ln" style="background:${C.edges[d].color};box-shadow:0 0 8px ${C.edges[d].color}"></span><span>${C.edges[d].short} <span class="hint" style="font-size:11.5px">${C.edges[d].ang}</span></span><span class="as">${C.edges[d].asp}</span></div>`).join('') + (C.legendNote || '');
+}
+
+function renderLore() {
+  $('lore').innerHTML = circle().lore.map((l, i) =>
+    `<details class="lore"${i ? '' : ' open'}><summary>${l.t}</summary>${l.p.map(x => `<p>${x}</p>`).join('')}</details>`).join('');
 }
 
 function update() {
   S.sugs = suggest();
   S.preview = null;
+  if (circle().keyed) renderStatic();   // the diatonic wheel relabels itself whenever the key changes
   renderBuilder(); renderProg(); renderSugs(); renderAnalysis(); renderSongs(); renderDynamic();
 }
-function fullRender() { renderStatic(); update(); }
+function fullRender() {
+  if (!circle().keyed) renderStatic();
+  renderModes(); renderLegend(); renderLore(); update();
+}
 
 /* =========================================================
    Tooltips
    ========================================================= */
 const INFO = {
-  western: `<h4>Western circle of fifths</h4><p>The twelve major keys sit clockwise in rising fifths (C → G → D …). Each step adds one sharp or removes one flat. The <span class="k">inner ring</span> shows each key’s relative minor, which uses the same notes.</p><p>Neighbors share six of their seven notes, so moves to nearby keys sound smooth. Keys across the circle are the most distant.</p>`,
-  coltrane: `<h4>Coltrane circle</h4><p>Based on the drawing John Coltrane gave Yusef Lateef. The 12 notes split into <span class="k">two whole-tone rings</span>: C D E F♯ G♯ B♭ and D♭ E♭ F G A B. Every fifth step zigzags from one ring to the other.</p><p>Faint triangles join notes a <span class="k">major third</span> apart. These are Coltrane’s “Giant Steps” tonal centers and also astrology’s element trines. Suggestions in this mode favor Coltrane substitutions and tritone subs.</p><p class="m">This is one common reading of the drawing; scholars interpret it in several ways.</p>`,
-  rotate: `<h4>Rotate the circle</h4><p>Turns the wheel 7.5°, a quarter of a key’s slice. Shortcut: ← / →. Rotation doesn’t change the music, but it lets you see your pattern from new angles. Mandalas look different when they turn.</p>`,
+  rotate: `<h4>Rotate the circle</h4><p>Turns the wheel 7.5°. Shortcut: ← / →. Rotation doesn’t change the music, but it lets you see your pattern from new angles. Mandalas look different when they turn.</p>`,
   drift: `<h4>Drift</h4><p>Sets the whole wheel turning slowly, like the zodiac across the night sky.</p>`,
   random: `<h4>Randomize</h4><p>Builds a new progression. Sometimes it picks a famous pattern in a random key; otherwise it takes a weighted random walk through the suggestions. The current pattern stays behind as a faint layer. Shortcut: R.</p>`,
   mandala: `<h4>Mandala</h4><p>Draws six random progressions at once and layers them into one geometric figure. The colors show which kinds of motion dominate.</p>`,
   ghosts: `<h4>Pattern layers</h4><p>Each time you randomize or clear, the old shape stays as a faint layer, so the lines build up into a mandala. This button wipes them.</p>`,
-  astro: `<h4>Astrology layer</h4><p>Adds the zodiac reading to tooltips and the pattern panel, with Aries on C and one sign per 30° step: aspects, elements and sacred figures.</p><p class="m">Symbolic correspondences, not science. Other traditions map the signs differently.</p>`,
+  astro: `<h4>Astrology layer</h4><p>Adds the symbolic reading of the current wheel to tooltips and the pattern panel. The twelve-fold wheels carry the zodiac, with Aries on C (by fifths on the Fifths and Coltrane wheels, by semitone on the Chromatic wheel): aspects, elements and sacred figures. The diatonic wheel carries the seven classical planets.</p><p class="m">Symbolic correspondences, not science. Other traditions map them differently.</p>`,
   sound: `<h4>Sound</h4><p>Plays each chord as you add it. ▶ Play (or Space) plays the whole progression.</p>`,
-  builder: `<h4>Start a progression</h4><p>Pick a root and a chord quality, then press <span class="k">Start</span>. Your first chord sets the key. You can also click any slice of the wheel: in Western mode the outer ring adds major chords and the inner ring adds minor chords.</p><p>Click a chip in your progression to remove it.</p>`,
+  builder: `<h4>Start a progression</h4><p>Pick a root and a chord quality, then press <span class="k">Start</span>. Your first chord sets the key. You can also click any slice of the wheel; hover a circle’s button at the top to see what its rings hold.</p><p>Click a chip in your progression to remove it.</p>`,
   sevenths: `<h4>Seventh chords</h4><p>Adds a 7th to every chord (maj7, m7, dominant 7 on V, ø7). That gives a jazzier sound. Coltrane mode always uses sevenths.</p>`,
-  suggestions: `<h4>What could come next</h4><p>Based on functional harmony (what the chord usually does in your key), the circle of fifths, borrowed chords, secondary dominants, tritone substitutions and Coltrane’s major-third cycles.</p><p>The dots show how strong or common the move is. The colored dot shows what kind of line it would draw. Hover to preview the line on the wheel.</p>`,
-  shapes: `<h4>Patterns &amp; moods</h4><p>Each line’s color depends on how far it jumps around the circle. Each distance has its own sound, and astrology gives the same angle its own meaning (an “aspect”). The shape’s overall color is a blend of its lines.</p>`,
+  suggestions: `<h4>What could come next</h4><p>Based on functional harmony (what the chord usually does in your key), the circle of fifths, borrowed chords, secondary dominants, tritone substitutions and Coltrane’s major-third cycles.</p><p>Each circle tilts the list toward its own logic: Coltrane toward major-third cycles, Chromatic toward half-step and mediant moves, Diatonic toward chords inside the key.</p><p>The dots show how strong or common the move is. The colored dot shows what kind of line it would draw. Hover to preview the line on the wheel.</p>`,
+  shapes: `<h4>Patterns &amp; moods</h4><p>Each line’s color depends on how far it jumps around the current wheel. Each distance has its own sound, and astrology gives the same angle its own meaning (an “aspect”). The shape’s overall color is a blend of its lines.</p>`,
   songs: `<h4>Famous songs</h4><p>Your chords are compared with well-known progressions in every key at once. <span class="k">Exact</span> means the whole pattern appears in your chords. <span class="k">Heading toward</span> means your last chords start a famous pattern, and it shows what comes next.</p>`,
+  dashed: `<h4>Dashed lines</h4><p>A dashed line touches a chord whose root lies outside the key, like ♭VII or ♭VI borrowed from the parallel minor. Those chords sit just inside (flattened) or just outside (raised) the slot of the scale degree they bend.</p>`,
 };
 
-function tipNote(pc, ring) {
-  const c = ring === 'm' ? { root: pc, q: 'm' } : { root: pc, q: 'M' };
-  const idx = ring === 'm' ? fIdx(pc + 3) : fIdx(pc);
-  const z = ZOD[idx];
-  let h = '';
-  if (ring === 'c') {
-    const ringName = pc % 2 === 0 ? 'Whole-tone ring I (C D E F♯ G♯ B♭)' : 'Whole-tone ring II (D♭ E♭ F G A B)';
-    const tri = [0,4,8].map(o => NOTE[mod(pc + o)]).join(' – ');
-    const sq = [0,3,6,9].map(o => NOTE[mod(pc + o)]).join(' – ');
-    h += `<h4>${NOTE[pc]}</h4><p class="m">${ringName}</p>`;
-    h += `<p><span class="k">Fifth neighbors</span> ${NOTE[mod(pc+5)]} and ${NOTE[mod(pc+7)]} sit on the other ring, which is why the circle zigzags.</p>`;
-    h += `<p><span class="k">Major-third triangle</span> ${tri}: Coltrane’s three tonal centers (an augmented triad).</p>`;
-    h += `<p><span class="k">Minor-third square</span> ${sq}: a diminished seventh chord.</p>`;
-    h += `<p><span class="k">Tritone</span> ${NOTE[mod(pc+6)]}, across the circle: its dominant 7th can stand in for ${NOTE[pc]}7.</p>`;
-  } else if (ring === 'm') {
-    const rel = mod(pc + 3);
-    h += `<h4>${NOTE[pc]} minor</h4><p class="m">${chordNotes(c)} · key signature ${keySig(idx)}</p>`;
-    h += `<p><span class="k">Relative major</span> ${NOTE[rel]}: the same notes, in the outer ring above it.</p>`;
-    h += `<p><span class="k">Neighbors</span> ${NOTE[mod(pc+5)]}m (iv) and ${NOTE[mod(pc+7)]}m (v). The harmonic-minor V is ${NOTE[mod(pc+7)]}7.</p>`;
-  } else {
-    h += `<h4>${NOTE[pc]} major</h4><p class="m">${chordNotes(c)} · key signature ${keySig(idx)}</p>`;
-    h += `<p><span class="k">Neighbors</span> ${NOTE[mod(pc+5)]} (IV, counter-clockwise) and ${NOTE[mod(pc+7)]} (V, clockwise) share 6 of 7 notes. These are the natural moves.</p>`;
-    h += `<p><span class="k">Relative minor</span> ${NOTE[mod(pc+9)]}m, just inside.</p>`;
-    h += `<p><span class="k">Opposite</span> ${NOTE[mod(pc+6)]}, the tritone and farthest key.</p>`;
-  }
-  if (S.astro) h += `<hr><p>${z.g}︎ <span class="k">${z.n}</span> · ${z.el} · ${z.mo} · ruled by ${z.ru}<br><span class="m">${z.kw}</span></p>`;
-  h += `<p class="m">Click to add${ring === 'c' ? '' : ` ${chordName(c)}`} to your progression.</p>`;
-  return h;
-}
-
 function tipEdge(i) {
-  const a = S.prog[i - 1], b = S.prog[i];
-  const pa = nodePos(a), pb = nodePos(b), d = stepDist(pa.idx, pb.idx), E = EDGE[d];
+  const C = circle(), k = keyOf(), a = S.prog[i - 1], b = S.prog[i];
+  const pa = C.pos(a, k), pb = C.pos(b, k), d = ringDist(pa.idx, pb.idx), E = C.edges[d];
   const up = mod(b.root - a.root);
   const motion = up === 0 ? 'same root' : up <= 6 ? `up a ${INTERVAL[up]}` : `down a ${INTERVAL[12 - up]}`;
+  const note = C.edgeNote?.(a, b, d, pa, pb);
   let h = `<h4>${chordName(a)} → ${chordName(b)}</h4>`;
   h += `<p><span style="color:${E.color}">━</span> <span class="k">${E.name}</span> · ${E.ang} on the circle</p>`;
-  h += `<p>Root motion: ${motion}.${!isCol() && d !== stepDist(fIdx(a.root), fIdx(b.root)) ? ` On this wheel the minor chords sit at their relative major, so the line shows how far apart the <i>key signatures</i> are.` : ''}</p>`;
+  h += `<p>Root motion: ${motion}.${note ? ' ' + note : ''}</p>`;
   h += `<p>${E.feel}</p>`;
   if (S.astro) h += `<hr><p>${E.asp}: <span class="m">${E.astro}</span></p>`;
   return h;
@@ -1081,48 +1470,41 @@ function tipEdge(i) {
 
 function tipFor(key) {
   const [t, a, b] = key.split(':');
+  const C = circle();
   switch (t) {
     case 'info': return INFO[a] || '';
-    case 'note': return tipNote(+a, b);
-    case 'ring': return a === 'out'
-      ? `<h4>Whole-tone ring I</h4><p>C D E F♯ G♯ B♭. Every note a whole step from the next. In astrology these are the fire and air signs (yang).</p>`
-      : `<h4>Whole-tone ring II</h4><p>D♭ E♭ F G A B. The other whole-tone scale. In astrology these are the earth and water signs (yin).</p>`;
-    case 'zod': {
-      const z = ZOD[+a], pc = FIFTHS[+a], e = ELEM[z.el];
-      const trine = [0,4,8].map(o => NOTE[FIFTHS[mod(+a + o)]]).join('–');
-      const sq = [0,3,6,9].map(o => NOTE[FIFTHS[mod(+a + o)]]).join('–');
-      return `<h4>${z.g}︎ ${z.n} ↔ ${NOTE[pc]}</h4><p class="m">${z.el} · ${z.mo} · ruled by ${z.ru}</p><p>${z.kw}.</p>
-        <p><span class="k">${z.el} trine</span> ${trine}: an augmented triad (${e.mood}).</p>
-        <p><span class="k">${z.mo} square</span> ${sq}: a diminished seventh, the ${MODAL_DESC[z.mo]} cross.</p>
-        <p><span class="k">Opposite sign</span> ${ZOD[mod(+a + 6)].n} ↔ ${NOTE[FIFTHS[mod(+a + 6)]]}, the tritone.</p>
-        <p class="m">Symbolic correspondence (Aries = C convention).</p>`;
-    }
+    case 'mode': return CIRCLES[a]?.info || '';
+    case 'note': return C.tipNote(+a, b);
+    case 'pick': return C.tipNote(+a, 'M');
+    case 'ring': return C.tipRing?.(a === 'out') || '';
     case 'edge': return tipEdge(+a);
     case 'sug': {
       const s = S.sugs[+a]; if (!s) return '';
-      const last = S.prog[S.prog.length - 1], d = stepDist(nodePos(last).idx, nodePos(s.chord).idx);
+      const last = S.prog[S.prog.length - 1], d = ringDist(nodePos(last).idx, nodePos(s.chord).idx), E = C.edges[d];
       return `<h4>${chordName(s.chord)} <span class="m">${roman(s.chord)}</span></h4><p class="k">${s.title}</p><p>${s.why}</p>
-        <p class="m">${chordNotes(s.chord)}</p><hr><p><span style="color:${EDGE[d].color}">━</span> draws a ${EDGE[d].short.toLowerCase()} line (${EDGE[d].ang}). ${EDGE[d].feel}</p>
-        ${S.astro ? `<p class="m">${EDGE[d].asp}: ${EDGE[d].astro}</p>` : ''}`;
+        <p class="m">${chordNotes(s.chord)}</p><hr><p><span style="color:${E.color}">━</span> draws a ${E.short.toLowerCase()} line (${E.ang}). ${E.feel}</p>
+        ${S.astro ? `<p class="m">${E.asp}: ${E.astro}</p>` : ''}`;
     }
     case 'chip': {
       const c = S.prog[+a]; if (!c) return '';
-      const p = nodePos(c), z = ZOD[p.idx];
       return `<h4>${+a + 1}. ${chordName(c)} <span class="m">${roman(c)}</span></h4><p>${QUAL[c.q].name}: ${chordNotes(c)}</p>
-        ${S.astro ? `<p class="m">${z.g}︎ ${z.n} · ${z.el}</p>` : ''}<p class="m">Click the chip to remove this chord.</p>`;
+        ${S.astro ? `<p class="m">${C.astroChip(nodePos(c))}</p>` : ''}<p class="m">Click the chip to remove this chord.</p>`;
     }
     case 'legend': {
-      const E = EDGE[+a];
-      const ex = { 0:'C ↔ Am', 1:'G → C', 2:'B♭ → C', 3:'C → E♭ / A', 4:'B → G → E♭', 5:'D♭7 → C', 6:'G7 ↔ D♭7' }[+a];
-      return `<h4 style="color:${E.color}">${E.short}</h4><p class="m">${E.name} · ${E.ang} · makes a ${E.shape.toLowerCase()}</p><p>${E.feel}</p><p class="m">Example: ${ex}</p>${S.astro ? `<hr><p>${E.asp}: <span class="m">${E.astro}</span></p>` : ''}`;
+      const E = C.edges[+a];
+      return `<h4 style="color:${E.color}">${E.short}</h4><p class="m">${E.name} · ${E.ang} · makes a ${E.shape.toLowerCase()}</p><p>${E.feel}</p><p class="m">Example: ${C.examples[+a]}</p>${S.astro ? `<hr><p>${E.asp}: <span class="m">${E.astro}</span></p>` : ''}`;
     }
     case 'fig': { const f = analysisCache?.figs[+a]; return f ? `<h4>${f.n}</h4><p>${f.d}</p>` : ''; }
     case 'elem': {
       const e = ELEM[a];
-      const signs = ZOD.map((z, i) => z.el === a ? `${z.g}︎ ${NOTE[FIFTHS[i]]}` : null).filter(Boolean).join('  ');
+      const signs = ZOD.map((z, i) => z.el === a ? `${z.g}︎ ${NOTE[C.slotPc(i)]}` : null).filter(Boolean).join('  ');
       return `<h4 style="color:${e.c}">${a}</h4><p>${e.mood}.</p><p class="m">Keys: ${signs}. Together they form an augmented triad.</p>`;
     }
-    case 'pick': return tipNote(+a, 'M');
+    case 'func': {
+      const F = FUNC[a], k = dKey(), D = dia(k);
+      const list = D.scale.filter(r => D.func[r] === a).map(r => chordName(diaChord(r, k))).join(', ');
+      return `<h4 style="color:${F.c}">${F.n}</h4><p>${F.mood}.</p><p class="m">${list ? `In ${keyName(k)}: ${list}.` : 'Chords whose root lies outside the key.'}</p>`;
+    }
     case 'qual': return `<h4>${QUAL[a].name}</h4><p class="m">Built from intervals ${QUAL[a].iv.join(', ')} (semitones above the root). Example on C: ${chordNotes({ root: 0, q: a })}</p>`;
   }
   return '';
@@ -1220,19 +1602,18 @@ function clickQuality(root, ring) {
   const fam = ring === 'm' ? 'min' : ring === 'M' ? 'maj' : null;
   const match = S.sugs.find(s => s.chord.root === root && (!fam || famOf(s.chord) === fam || (fam === 'maj' && famOf(s.chord) === 'dom')));
   if (match) return match.chord.q;
-  const k = keyOf();
-  if (ring === 'c') return k && mod(root - k.tonic) === 7 ? '7' : 'maj7';
-  const deg = k ? mod(root - k.tonic) : 0;
-  return adaptQ(ring === 'm' ? 'm' : 'M', deg);
+  const k = keyOf(), C = circle();
+  if (C.clickQ) return C.clickQ(root, ring, k);
+  return adaptQ(ring === 'm' ? 'm' : 'M', k ? mod(root - k.tonic) : 0);
 }
 const rnd = n => Math.floor(Math.random() * n);
 function randomProg() {
-  const root = rnd(12);
+  const root = rnd(12), C = circle();
   if (Math.random() < 0.4) {
     const s = SONGS[rnd(SONGS.length)];
     return s.q.map(x => ({ root: mod(x.d + root), q: adaptQ(CODE_Q[x.f], x.d) }));
   }
-  const prog = [{ root, q: isCol() ? 'maj7' : (Math.random() < 0.7 ? adaptQ('M', 0) : adaptQ('m', 0)) }];
+  const prog = [{ root, q: C.startQ ? C.startQ() : (Math.random() < 0.7 ? adaptQ('M', 0) : adaptQ('m', 0)) }];
   const len = 4 + rnd(4);
   while (prog.length < len) {
     const opts = suggest(prog).slice(0, 6);
@@ -1260,18 +1641,22 @@ function mandala() {
 }
 function setMode(m) {
   S.mode = m;
-  $('modeW').classList.toggle('on', m === 'western');
-  $('modeC').classList.toggle('on', m === 'coltrane');
+  $('wheel').setAttribute('aria-label', circle().aria);
   fullRender();
 }
 function toggle(btn, key) { S[key] = !S[key]; $(btn).classList.toggle('on', S[key]); fullRender(); }
 function rotate(deg) { S.rotTarget += deg; }
+function pick(change) {
+  change();
+  playChord({ root: S.pickRoot, q: S.pickQ });
+  // before the first chord, the builder's pick is the diatonic wheel's key
+  if (circle().keyed && !S.prog.length) update(); else renderBuilder();
+}
 
 /* =========================================================
    Wiring
    ========================================================= */
-$('modeW').onclick = () => setMode('western');
-$('modeC').onclick = () => setMode('coltrane');
+$('modes').onclick = e => { const b = e.target.closest('[data-mode]'); if (b && b.dataset.mode !== S.mode) setMode(b.dataset.mode); };
 $('rotL').onclick = () => rotate(-7.5);
 $('rotR').onclick = () => rotate(7.5);
 $('rotReset').onclick = () => { S.drift = false; $('drift').classList.remove('on'); S.rotTarget = Math.round(S.rotation / 360) * 360; };
@@ -1286,8 +1671,8 @@ $('undo').onclick = () => { S.prog.pop(); update(); };
 $('clear').onclick = () => { pushGhost(); S.prog = []; update(); };
 $('play').onclick = playProg;
 $('clearGhosts').onclick = () => { S.ghosts = []; renderDynamic(); };
-$('roots').onclick = e => { const b = e.target.closest('[data-root]'); if (!b) return; S.pickRoot = +b.dataset.root; playChord({ root: S.pickRoot, q: S.pickQ }); renderBuilder(); };
-$('quals').onclick = e => { const b = e.target.closest('[data-q]'); if (!b) return; S.pickQ = b.dataset.q; playChord({ root: S.pickRoot, q: S.pickQ }); renderBuilder(); };
+$('roots').onclick = e => { const b = e.target.closest('[data-root]'); if (b) pick(() => S.pickRoot = +b.dataset.root); };
+$('quals').onclick = e => { const b = e.target.closest('[data-q]'); if (b) pick(() => S.pickQ = b.dataset.q); };
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
@@ -1316,7 +1701,6 @@ document.addEventListener('keydown', e => {
   }
   sky.innerHTML = h;
 })();
-renderLegend();
 fullRender();
 requestAnimationFrame(tick);
 </script>
